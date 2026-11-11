@@ -1,0 +1,2374 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>會議室與展廳座位配置管理工具 (進階版)</title>
+<style>
+:root {
+  --navy: #17365d;
+  --blue: #2563a6;
+  --teal: #0f766e;
+  --bg: #eef2f7;
+  --line: #cbd5e1;
+  --red: #b42318;
+  --green: #166534;
+  --amber: #b45309;
+  --purple: #6b21a8;
+  --wall: #334155;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif;
+  background: var(--bg);
+  color: #172033;
+  user-select: none;
+}
+header {
+  background: linear-gradient(135deg, #17365d, #0f766e);
+  color: #fff;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+}
+header h1 { margin: 0; font-size: 22px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 10px; }
+header .desc { font-size: 13px; opacity: 0.88; margin-top: 4px; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.app {
+  display: grid;
+  grid-template-columns: 380px minmax(700px, 1fr);
+  gap: 14px;
+  padding: 14px;
+  max-width: 1850px;
+  margin: auto;
+}
+.panel, .workspace {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+.panel {
+  padding: 14px 16px;
+  align-self: start;
+  position: sticky;
+  top: 10px;
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
+}
+.workspace {
+  padding: 14px;
+  min-height: 820px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 12px;
+}
+.tab-btn {
+  flex: 1;
+  padding: 8px 6px;
+  border: none;
+  background: transparent;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: all 0.15s;
+}
+.tab-btn.active {
+  color: var(--navy);
+  border-bottom: 3px solid var(--navy);
+  background: #f1f5f9;
+}
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+h2 {
+  font-size: 16px;
+  color: var(--navy);
+  margin: 10px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field.full { grid-column: 1 / -1; }
+label { font-size: 13px; font-weight: 700; color: #334155; }
+input, select, textarea, button { font: inherit; }
+input, select, textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+textarea { min-height: 70px; resize: vertical; }
+
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.actions.three { grid-template-columns: 1fr 1fr 1fr; }
+.btn {
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  background: #e2e8f0;
+  color: #172033;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: filter 0.15s;
+}
+.btn.primary { background: var(--navy); color: #fff; }
+.btn.green { background: var(--teal); color: #fff; }
+.btn.purple { background: var(--purple); color: #fff; }
+.btn.amber { background: var(--amber); color: #fff; }
+.btn.red { background: #fee2e2; color: #991b1b; }
+.btn:hover { filter: brightness(0.93); }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.toolbar .btn { padding: 6px 10px; font-size: 12px; }
+.status { margin-left: auto; font-size: 13px; color: #475569; font-weight: 600; }
+
+#roomWrap {
+  flex: 1;
+  height: 720px;
+  overflow: auto;
+  background: #cbd5e1;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  padding: 24px;
+  position: relative;
+  background-image: radial-gradient(#94a3b8 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+#room {
+  position: relative;
+  width: 1200px;
+  height: 800px;
+  background: #ffffff;
+  border: 3px solid #334155;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  transform-origin: top left;
+}
+
+/* 講台 / 舞台 */
+.stage {
+  position: absolute;
+  left: 35%;
+  top: 16px;
+  width: 30%;
+  height: 52px;
+  background: #334155;
+  color: #fff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  letter-spacing: 4px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  cursor: move;
+  z-index: 10;
+}
+.stage.selected { outline: 3px solid #16a34a; }
+
+/* 結構物件（牆壁、門、立柱） */
+.structObj {
+  position: absolute;
+  cursor: move;
+  z-index: 5;
+}
+.structObj.selected { outline: 2px dashed #16a34a; outline-offset: 3px; }
+.structWall {
+  background: var(--wall);
+  border-radius: 2px;
+}
+.structDoor {
+  position: absolute;
+  inset: 0;
+}
+.structPillar {
+  background: #e2e8f0;
+  border: 2px solid #475569;
+  background-image: repeating-linear-gradient(45deg, #cbd5e1, #cbd5e1 5px, #e2e8f0 5px, #e2e8f0 10px);
+  border-radius: 4px;
+}
+.structPillar.round { border-radius: 50%; }
+
+/* 桌位物件 */
+.tableObj {
+  position: absolute;
+  cursor: move;
+  user-select: none;
+  z-index: 15;
+  isolation: isolate;
+}
+.tableShape {
+  position: absolute;
+  inset: 0;
+  background: #fbf3d5;
+  border: 2.5px solid #8b5e34;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b4423;
+  font-weight: 900;
+  text-align: center;
+  padding: 6px;
+  border-radius: 8px;
+}
+.round .tableShape { border-radius: 50%; }
+.oval .tableShape { border-radius: 50%; }
+.uShape .tableShape {
+  background: transparent;
+  border: 22px solid #8b5e34;
+  border-top: 0;
+  border-radius: 0 0 20px 20px;
+}
+.uShape .tableShape:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fbf3d5;
+  z-index: -1;
+}
+.hollowSquare .tableShape {
+  background: transparent;
+  border: 22px solid #8b5e34;
+  border-radius: 8px;
+}
+.classroom .tableShape {
+  background: #e2e8f0;
+  border-color: #475569;
+  color: #1e293b;
+  border-radius: 4px;
+}
+.auditoriumRow {
+  pointer-events: none;
+}
+.auditoriumRow .tableShape,
+.auditoriumRow .seat {
+  pointer-events: auto;
+}
+.auditoriumRow .tableShape {
+  background: rgba(241, 245, 249, 0.92);
+  border: 1px dashed #94a3b8;
+  color: #475569;
+  border-radius: 20px;
+  font-size: 11px;
+  height: 24px;
+  width: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+}
+
+.tableObj.selected .tableShape {
+  outline: 3px solid #16a34a;
+  outline-offset: 2px;
+}
+.tableLabel { pointer-events: none; line-height: 1.25; }
+
+/* 席位元件 */
+.seat {
+  position: absolute;
+  width: 70px;
+  height: 36px;
+  border: 2px solid #2563a6;
+  background: #dbeafe;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #123b63;
+  padding: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transform-origin: center center;
+  transition: transform 0.05s ease-out;
+}
+.seat .no { font-size: 9px; opacity: 0.75; line-height: 1; }
+.seat .name { font-size: 11px; font-weight: 900; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.seat.chairman { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+.seat.side { background: #fef3c7; border-color: #d97706; color: #92400e; }
+.seat.vip { background: #f3e8ff; border-color: #7e22ce; color: #581c87; }
+.seat.selected { outline: 3px solid #16a34a !important; z-index: 25; }
+.seat.overlap { box-shadow: 0 0 0 2px #ef4444, 0 2px 6px rgba(239,68,68,0.35); }
+.overlap-warn { color: #b42318; font-weight: 800; }
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 12px;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.dot {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border: 2px solid;
+  border-radius: 3px;
+  vertical-align: -1px;
+  margin-right: 5px;
+}
+.normalDot { background: #dbeafe; border-color: #2563a6; }
+.chairDot { background: #fee2e2; border-color: #dc2626; }
+.vipDot { background: #f3e8ff; border-color: #7e22ce; }
+.sideDot { background: #fef3c7; border-color: #d97706; }
+
+/* 模態視窗 (Modal) */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  backdrop-filter: blur(2px);
+}
+.modal.show { display: flex; }
+.dialog {
+  background: #fff;
+  width: min(600px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+}
+.dialog h3 { margin: 0 0 14px; color: var(--navy); font-size: 18px; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+.note { font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 8px; }
+.badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; background: #e2e8f0; font-weight: bold; }
+.template-toolbar { display:grid; grid-template-columns:1fr auto; gap:10px; margin-bottom:12px; }
+.template-filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.template-filter { border:1px solid #cbd5e1; background:#fff; color:#475569; border-radius:999px; padding:6px 10px; cursor:pointer; font-size:12px; font-weight:800; }
+.template-filter.active { color:#fff; background:var(--navy); border-color:var(--navy); }
+.template-layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr); gap:14px; min-height:490px; }
+.template-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; align-content:start; max-height:500px; overflow:auto; padding:2px 5px 6px 2px; }
+.template-card { border:1px solid #cbd5e1; border-radius:12px; padding:10px; background:#fff; cursor:pointer; text-align:left; transition:.15s; display:grid; grid-template-columns:58px 1fr; gap:10px; align-items:center; }
+.template-card:hover { border-color:var(--blue); box-shadow:0 5px 16px rgba(37,99,166,.14); transform:translateY(-1px); }
+.template-card.selected { border:2px solid var(--teal); background:#f0fdfa; box-shadow:0 5px 18px rgba(15,118,110,.16); }
+.template-thumb { width:58px; height:58px; border-radius:10px; background:#eef2ff; display:flex; align-items:center; justify-content:center; font-size:29px; }
+.template-card strong { display:block; color:var(--navy); font-size:14px; margin-bottom:3px; }
+.template-card span { display:block; color:#64748b; font-size:11px; line-height:1.35; }
+.template-card .mini { margin-top:5px; color:var(--teal); font-weight:800; }
+.template-preview { border:1px solid #cbd5e1; border-radius:12px; background:#f8fafc; padding:14px; display:flex; flex-direction:column; }
+.template-preview h4 { margin:0; color:var(--navy); font-size:18px; }
+.preview-canvas { height:250px; background:#fff; border:2px solid #475569; border-radius:8px; margin:12px 0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.preview-canvas svg { width:100%; height:100%; }
+.preview-desc { color:#475569; font-size:13px; line-height:1.55; min-height:42px; }
+.preview-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:10px 0; }
+.preview-stat { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:7px; text-align:center; }
+.preview-stat b { display:block; color:var(--navy); font-size:14px; }
+.preview-stat small { color:#64748b; font-size:10px; }
+.template-empty { grid-column:1/-1; padding:32px; text-align:center; color:#64748b; }
+@media (max-width:1100px) { .app { grid-template-columns:1fr; } .panel { position:static; max-height:none; } .template-layout { grid-template-columns:1fr; } .template-preview { order:-1; } }
+@media (max-width:700px) { header { align-items:flex-start; flex-direction:column; gap:10px; } .template-grid { grid-template-columns:1fr; } .template-toolbar { grid-template-columns:1fr; } }
+
+@media print {
+  header, .panel, .toolbar, .legend, .modal { display: none !important; }
+  .app { display: block; padding: 0; }
+  .workspace { border: 0; box-shadow: none; padding: 0; }
+  #roomWrap { height: auto; overflow: visible; border: 0; padding: 0; background: #fff; }
+  #room { transform: none !important; page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🏢 會議室與展廳座位配置管理工具</h1>
+    <div class="desc">支援常規桌型、教室矩陣、階梯大講堂弧形座位、門牆隔間與名單批次排位</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn amber" id="openTemplateModal">🧩 內建座位版型</button>
+    <button class="btn green" id="openBatchModal">📋 批次名單排位</button>
+    <button class="btn primary" id="openClassroomModal">🏫 教室網格生成</button>
+    <button class="btn purple" id="openAuditoriumModal">🏟️ 大講堂弧形生成</button>
+  </div>
+</header>
+
+<main class="app">
+  <aside class="panel">
+    <!-- 標籤切換 -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tab-table">桌位編輯</button>
+      <button class="tab-btn" data-tab="tab-struct">結構門牆</button>
+      <button class="tab-btn" data-tab="tab-room">場地設定</button>
+      <button class="tab-btn" data-tab="tab-export">匯出與檔案</button>
+    </div>
+
+    <!-- 標籤 1：桌位與席位編輯 -->
+    <div class="tab-content active" id="tab-table">
+      <h2>新增 / 調整桌位</h2>
+      <div class="grid">
+        <div class="field">
+          <label>桌型配置</label>
+          <select id="tableType">
+            <option value="rect">長方桌 (雙側對坐)</option>
+            <option value="classroom">長條桌 (單側朝台)</option>
+            <option value="round">圓桌 (徑向旋轉)</option>
+            <option value="oval">橢圓桌 (徑向旋轉)</option>
+            <option value="uShape">U型桌 (開口向前)</option>
+            <option value="hollowSquare">口字型會議桌</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>桌號 / 名稱</label>
+          <input id="tableName" value="第1桌">
+        </div>
+        <div class="field">
+          <label>主席位 / 席數</label>
+          <input id="seatCount" type="number" min="1" max="40" value="8">
+        </div>
+        <div class="field">
+          <label>側面加位</label>
+          <input id="sideCount" type="number" min="0" max="12" value="0">
+        </div>
+        <div class="field full">
+          <label>主席位置 (首長席)</label>
+          <select id="chairPos">
+            <option value="none">不指定主席位</option>
+            <option value="top">上方中央 (面向觀眾)</option>
+            <option value="bottom">下方中央</option>
+            <option value="left">左側中央</option>
+            <option value="right">右側中央</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="addTable">➕ 新增此桌位</button>
+        <button class="btn green" id="updateTable">💾 更新選取桌位</button>
+        <button class="btn" id="duplicateTable">📄 複製桌位</button>
+        <button class="btn red" id="deleteTable">🗑️ 刪除選取桌位</button>
+      </div>
+
+      <h2>單一席位資料</h2>
+      <div class="grid">
+        <div class="field full">
+          <label>姓名 / 單位</label>
+          <input id="seatName" placeholder="點選畫布席位後直接輸入">
+        </div>
+        <div class="field">
+          <label>席位身份</label>
+          <select id="seatRole">
+            <option value="normal">一般席</option>
+            <option value="chairman">主席 / 首長席</option>
+            <option value="vip">貴賓 / 講員席</option>
+            <option value="side">側面加位</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>席次編號 / 職稱</label>
+          <input id="seatNo" placeholder="如 01, 分機721">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn green" id="applySeat">套用席位</button>
+        <button class="btn" id="clearSeat">清空姓名</button>
+      </div>
+    </div>
+
+    <!-- 標籤 2：場地結構物件（門、牆、柱、講台） -->
+    <div class="tab-content" id="tab-struct">
+      <h2>場地結構物件</h2>
+      <p class="note">在畫布上擺放隔間牆、進出門與立柱，標示場地真實動線。</p>
+      <div class="grid">
+        <div class="field">
+          <label>結構類別</label>
+          <select id="structType">
+            <option value="wall-h">水平隔間牆 (橫)</option>
+            <option value="wall-v">垂直隔間牆 (直)</option>
+            <option value="door-single">單開門 (含開向軌跡)</option>
+            <option value="door-double">雙開門 (雙向對開)</option>
+            <option value="pillar-round">圓形結構柱</option>
+            <option value="pillar-square">方形結構柱</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>標籤 / 備註</label>
+          <input id="structLabel" value="後方大門">
+        </div>
+        <div class="field">
+          <label>長度 / 寬度 (px)</label>
+          <input id="structW" type="number" value="120">
+        </div>
+        <div class="field">
+          <label>高度 / 厚度 (px)</label>
+          <input id="structH" type="number" value="14">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="addStruct">➕ 擺放結構物</button>
+        <button class="btn green" id="updateStruct">💾 更新結構物</button>
+        <button class="btn red" id="deleteStruct">🗑️ 刪除結構物</button>
+      </div>
+      
+      <h2>預設結構快速置入</h2>
+      <div class="actions">
+        <button class="btn" id="quickAddDoorLeft">🚪 增設左側進出門</button>
+        <button class="btn" id="quickAddDoorRight">🚪 增設右側進出門</button>
+      </div>
+    </div>
+
+    <!-- 標籤 3：會議室與講台基本設定 -->
+    <div class="tab-content" id="tab-room">
+      <h2>會議室整體尺寸</h2>
+      <div class="grid">
+        <div class="field full">
+          <label>會議 / 活動主題</label>
+          <input id="meetingName" value="2026 年度策略規劃會議座位配置表">
+        </div>
+        <div class="field">
+          <label>場地寬度 (px)</label>
+          <input id="roomW" type="number" min="800" max="3000" step="50" value="1200">
+        </div>
+        <div class="field">
+          <label>場地高度 (px)</label>
+          <input id="roomH" type="number" min="600" max="2500" step="50" value="800">
+        </div>
+        <div class="field full">
+          <label>講台 / 舞台標題</label>
+          <input id="stageText" value="講台區 / 主席台 (Stage)">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="centerStage">講台置中</button>
+        <button class="btn red" id="clearAll">清空全部畫布</button>
+      </div>
+    </div>
+
+    <!-- 標籤 4：檔案匯出與備份 -->
+    <div class="tab-content" id="tab-export">
+      <h2>檔案匯出與備份</h2>
+      <div class="actions">
+        <button class="btn green" id="exportJson">📦 匯出配置 JSON</button>
+        <button class="btn" id="importJson">📥 匯入配置 JSON</button>
+        <button class="btn green" id="exportSvg">🎨 匯出向量 SVG</button>
+        <button class="btn purple" id="exportCsv">📊 匯出席次 CSV (Excel)</button>
+        <button class="btn primary" id="printBtn">🖨️ 列印 / 另存 PDF</button>
+      </div>
+      <input id="jsonFile" type="file" accept="application/json,.json" hidden>
+      <p class="note">
+        • <b>SVG 向量檔</b>：保留精準旋轉角度與門牆結構，可直接置入 PowerPoint 或 Illustrator。<br>
+        • <b>CSV 席次清冊</b>：帶有 UTF-8 BOM，微軟 Excel 開啟繁體中文絕不亂碼。<br>
+        • <b>JSON 備份檔</b>：保存完整座標、結構與姓名，方便隨時復原續編。
+      </p>
+    </div>
+  </aside>
+
+  <!-- 工作畫布區 -->
+  <section class="workspace">
+    <div class="toolbar">
+      <button class="btn" id="zoomOut">🔍 縮小</button>
+      <button class="btn" id="zoomReset">100%</button>
+      <button class="btn" id="zoomIn">放大</button>
+      <button class="btn" id="autoArrange">📐 桌位防重疊排列</button>
+      <button class="btn" id="undoBtn" disabled title="復原上一步 (Ctrl+Z)">↩️ 復原</button>
+      <span class="status" id="status">桌數: 0｜席位: 0</span>
+    </div>
+
+    <div id="roomWrap">
+      <div id="room">
+        <!-- 講台 -->
+        <div class="stage" id="stage">講台區 / 主席台 (Stage)</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot normalDot"></i>一般席</span>
+      <span><i class="dot chairDot"></i>主席席</span>
+      <span><i class="dot vipDot"></i>貴賓/講員席</span>
+      <span><i class="dot sideDot"></i>側面加位</span>
+      <span style="margin-left:auto; color:#64748b;">💡 提示：點擊席位直接輸入姓名；拖曳桌位或門牆移動；支援圓桌/階梯弧形徑向角度。</span>
+    </div>
+  </section>
+</main>
+
+
+<!-- Modal 0: 內建座位版型 -->
+<div class="modal" id="templateModal">
+  <div class="dialog" style="width:min(1080px,97vw)">
+    <h3>🧩 內建座位版型庫</h3>
+    <p class="note">先選擇版型查看平面預覽、席位數與適用情境，再按「套用此版型」。套用會取代目前畫布，但可按 Ctrl+Z 復原。</p>
+    <div class="template-toolbar">
+      <input id="templateSearch" placeholder="搜尋版型，例如：首長、教室、談判、考試">
+      <select id="templateSort" style="width:160px"><option value="default">建議排序</option><option value="seatsAsc">席位少至多</option><option value="seatsDesc">席位多至少</option></select>
+    </div>
+    <div class="template-filters" id="templateFilters">
+      <button class="template-filter active" data-category="all">全部</button>
+      <button class="template-filter" data-category="meeting">會議決策</button>
+      <button class="template-filter" data-category="training">教學訓練</button>
+      <button class="template-filter" data-category="event">簡報活動</button>
+      <button class="template-filter" data-category="special">特殊用途</button>
+    </div>
+    <div class="template-layout">
+      <div class="template-grid" id="templateGrid"></div>
+      <aside class="template-preview">
+        <h4 id="previewTitle">請選擇版型</h4>
+        <div class="preview-canvas" id="previewCanvas"></div>
+        <div class="preview-desc" id="previewDesc">點選左側版型即可查看配置示意。</div>
+        <div class="preview-stats">
+          <div class="preview-stat"><b id="previewSeats">-</b><small>席位</small></div>
+          <div class="preview-stat"><b id="previewTables">-</b><small>桌區</small></div>
+          <div class="preview-stat"><b id="previewSize">-</b><small>場地尺寸</small></div>
+        </div>
+        <button class="btn primary" id="applySelectedTemplate" disabled>套用此版型</button>
+      </aside>
+    </div>
+    <div class="dialog-footer"><button class="btn" id="closeTemplateModal">取消</button></div>
+  </div>
+</div>
+
+<!-- Modal 1: 教室行與列快速生成器 -->
+<div class="modal" id="classroomModal">
+  <div class="dialog">
+    <h3>🏫 教室網格座位快速生成器</h3>
+    <p class="note">依輸入的行數與列數，自動整齊排列長條課堂桌，支援名單一鍵順序分配。</p>
+    <div class="grid">
+      <div class="field">
+        <label>行數 (列數 Rows)</label>
+        <input id="crRows" type="number" min="1" max="15" value="4">
+      </div>
+      <div class="field">
+        <label>列數 (欄數 Columns)</label>
+        <input id="crCols" type="number" min="1" max="10" value="3">
+      </div>
+      <div class="field">
+        <label>每桌人數</label>
+        <select id="crSeatsPerTable">
+          <option value="1">單人單桌 (Individual Desk)</option>
+          <option value="2" selected>雙人並排 (2人課堂桌)</option>
+          <option value="3">三人長桌 (3人長桌)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>走道模式</label>
+        <select id="crAisle">
+          <option value="none">連續無中空走道</option>
+          <option value="center" selected>中央走道 (左右分區)</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>批次名單貼上 (每行一人，依序自動填入)</label>
+        <textarea id="crNames" placeholder="張小明&#10;李大華&#10;王美麗&#10;陳建宏..."></textarea>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" id="closeClassroomModal">取消</button>
+      <button class="btn primary" id="generateClassroom">立即生成教室矩陣</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 2: 階梯大講堂弧形座位生成器 -->
+<div class="modal" id="auditoriumModal">
+  <div class="dialog">
+    <h3>🏟️ 大講堂階梯弧形座位生成器</h3>
+    <p class="note">產生如大禮堂、音樂廳或扇形國際會議廳之階梯同心圓弧座位，席位法線自動朝向講台圓心。</p>
+    <div class="grid">
+      <div class="field">
+        <label>總排數 (Tiers / Rows)</label>
+        <input id="audRows" type="number" min="1" max="12" value="4">
+      </div>
+      <div class="field">
+        <label>第一排席位數</label>
+        <input id="audStartSeats" type="number" min="4" max="24" value="8">
+      </div>
+      <div class="field">
+        <label>每排遞增席數</label>
+        <input id="audSeatStep" type="number" min="0" max="6" value="2">
+      </div>
+      <div class="field">
+        <label>弧形展開角度 (°)</label>
+        <input id="audAngleSpan" type="number" min="40" max="160" value="90">
+      </div>
+      <div class="field">
+        <label>首排曲率半徑 (px)</label>
+        <input id="audStartRadius" type="number" min="150" max="600" value="230">
+      </div>
+      <div class="field">
+        <label>排距間隔 (px)</label>
+        <input id="audRowSpacing" type="number" min="50" max="120" value="70">
+      </div>
+      <div class="field full">
+        <label>大講堂學員 / 與會名單 (依序排入席位)</label>
+        <textarea id="audNames" placeholder="貼上姓名名單，將依第1排、第2排...順序填入"></textarea>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" id="closeAuditoriumModal">取消</button>
+      <button class="btn purple" id="generateAuditorium">立即生成弧形講堂</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 3: 批次名單排位 -->
+<div class="modal" id="batchModal">
+  <div class="dialog">
+    <h3>📋 批次名單填入與指派</h3>
+    <p class="note">將與會名單一次性批量填入當前選取的桌位，或是全場所有座位。</p>
+    <div class="field full">
+      <label>人員名單 (支援換行、逗號、空格分隔)</label>
+      <textarea id="batchNameList" style="min-height: 140px;" placeholder="王大明&#10;李小華&#10;陳正忠&#10;林美秀..."></textarea>
+    </div>
+    <div class="actions">
+      <button class="btn green" id="batchToSelectedTable">填入目前選取的桌位</button>
+      <button class="btn primary" id="batchToAllTables">依序填入全場所有席位</button>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" id="closeBatchModal">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 4: 確認清空 -->
+<div class="modal" id="confirmModal">
+  <div class="dialog">
+    <h3>⚠️ 確認清空全場配置</h3>
+    <p>這會清除所有桌位、席位以及門牆結構（清除後仍可按 Ctrl+Z 或「復原」還原）。</p>
+    <div class="dialog-footer">
+      <button class="btn" id="cancelClear">取消</button>
+      <button class="btn red" id="confirmClear">確定全部清空</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const room = $('room');
+  const roomWrap = $('roomWrap');
+  const stageEl = $('stage');
+
+  // 資料核心狀態
+  let tables = [];
+  let structures = [];
+  let stageConfig = { x: 420, y: 16, w: 360, h: 52, text: '講台區 / 主席台 (Stage)' };
+
+  let selectedTable = null;
+  let selectedSeat = null;
+  let selectedStruct = null;
+  let zoom = 1;
+  let drag = null;
+  let toastTimer = null;
+  const undoStack = [];
+  const MAX_HISTORY = 30;
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const uid = () => 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  function updateUndoBtn() {
+    const btn = $('undoBtn');
+    if (btn) btn.disabled = undoStack.length === 0;
+  }
+
+  function pushHistory() {
+    undoStack.push(JSON.stringify(getProjectData()));
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    updateUndoBtn();
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    const raw = undoStack.pop();
+    updateUndoBtn();
+    try {
+      loadProjectData(JSON.parse(raw));
+      showToast('已復原上一步操作。');
+    } catch (e) {}
+  }
+
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.tab-content').forEach(c => {
+      c.classList.toggle('active', c.id === tabId);
+    });
+  }
+
+  // 標籤頁切換
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.onclick = () => switchTab(btn.dataset.tab);
+  });
+
+  // 桌型標準預設尺寸
+  function dims(type) {
+    if (type === 'round') return { w: 220, h: 220 };
+    if (type === 'oval') return { w: 320, h: 200 };
+    if (type === 'uShape') return { w: 380, h: 240 };
+    if (type === 'hollowSquare') return { w: 360, h: 260 };
+    if (type === 'classroom') return { w: 220, h: 60 };
+    if (type === 'auditoriumRow') return { w: 420, h: 50 };
+    return { w: 320, h: 160 }; // rect
+  }
+
+  function uShapeSplit(n) {
+    if (n <= 2) return { sideCnt: 0, bottomCnt: n };
+    const sideCnt = Math.max(1, Math.floor(n / 3));
+    const bottomCnt = Math.max(1, n - sideCnt * 2);
+    return { sideCnt, bottomCnt };
+  }
+
+  function hollowCounts(n) {
+    const base = Math.floor(n / 4);
+    const rem = n % 4;
+    return [
+      base + (rem >= 1 ? 1 : 0), // top
+      base + (rem >= 3 ? 1 : 0), // right
+      base + (rem >= 2 ? 1 : 0), // bottom
+      base                       // left
+    ];
+  }
+
+  // 統一防重疊尺寸計算 (所有建立/更新桌位路徑共用)
+  function computeTableSize(type, normalCount, sideCount = 0, reqW = 0, reqH = 0) {
+    const d = dims(type);
+    const pitchX = 78;     // 依 (i+1)*w/(n+1) 均分規則，n>=2 時需 (n+1)*78 才能確保 >=8px 水平淨距
+    const pitchSideY = 78; // 側邊席位旋轉90度，垂直佔高70px + 8px淨距
+    let minW = d.w;
+    let minH = d.h;
+    const sideRows = Math.ceil(sideCount / 2);
+
+    if (type === 'classroom') {
+      minW = normalCount >= 2 ? Math.max(d.w, (normalCount + 1) * pitchX) : d.w;
+      minH = Math.max(d.h, sideRows >= 1 ? (sideRows + 1) * pitchSideY : 0);
+    } else if (type === 'rect') {
+      const topCnt = Math.ceil(normalCount / 2);
+      minW = topCnt >= 2 ? Math.max(d.w, (topCnt + 1) * pitchX) : d.w;
+      minH = Math.max(d.h, sideRows >= 1 ? (sideRows + 1) * pitchSideY : 0);
+    } else if (type === 'uShape') {
+      const { sideCnt, bottomCnt } = uShapeSplit(normalCount);
+      minW = bottomCnt >= 2 ? Math.max(d.w, (bottomCnt + 1) * pitchX) : d.w;
+      const vCnt = Math.max(sideCnt, sideRows);
+      minH = vCnt >= 2 ? Math.max(d.h, (vCnt + 1) * pitchSideY) : d.h;
+    } else if (type === 'hollowSquare') {
+      const [topC, rightC, bottomC, leftC] = hollowCounts(normalCount);
+      const hCnt = Math.max(topC, bottomC);
+      const vCnt = Math.max(leftC, rightC, sideRows);
+      minW = hCnt >= 2 ? Math.max(d.w, (hCnt + 1) * pitchX) : d.w;
+      minH = vCnt >= 2 ? Math.max(d.h, (vCnt + 1) * pitchSideY) : d.h;
+    } else if (type === 'round' || type === 'oval') {
+      const diameter = Math.ceil((normalCount * 82) / Math.PI);
+      minW = Math.max(d.w, diameter);
+      minH = Math.max(
+        d.h,
+        type === 'round'
+          ? diameter
+          : Math.max(Math.round(diameter * 0.65), Math.ceil((normalCount * 78) / Math.PI) - 56)
+      );
+    }
+
+    return {
+      w: Math.max(minW, Number(reqW) || 0),
+      h: Math.max(minH, Number(reqH) || 0)
+    };
+  }
+
+  // 生成席位 (依桌型精準指定主席位索引)
+  function makeSeats(n, side, chair, type = 'rect') {
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      arr.push({ id: uid(), no: String(i + 1), name: '', role: 'normal' });
+    }
+    for (let i = 0; i < side; i++) {
+      arr.push({ id: uid(), no: '加' + (i + 1), name: '', role: 'side' });
+    }
+    if (chair !== 'none' && arr.length) {
+      let idx = 0;
+      if (type === 'rect') {
+        const topCnt = Math.ceil(n / 2);
+        const bottomCnt = n - topCnt;
+        if (chair === 'top') idx = Math.floor(topCnt / 2);
+        else if (chair === 'bottom') idx = bottomCnt > 0 ? topCnt + Math.floor(bottomCnt / 2) : 0;
+        else if (chair === 'left') idx = side >= 1 ? n : 0;
+        else if (chair === 'right') idx = side >= 2 ? n + 1 : Math.max(0, topCnt - 1);
+      } else if (type === 'hollowSquare') {
+        const [topC, rightC, bottomC, leftC] = hollowCounts(n);
+        if (chair === 'top') idx = Math.floor(topC / 2);
+        else if (chair === 'right') idx = rightC > 0 ? topC + Math.floor(rightC / 2) : 0;
+        else if (chair === 'bottom') idx = bottomC > 0 ? topC + rightC + Math.floor(bottomC / 2) : 0;
+        else if (chair === 'left') idx = leftC > 0 ? topC + rightC + bottomC + Math.floor(leftC / 2) : 0;
+      } else if (type === 'uShape') {
+        const { sideCnt, bottomCnt } = uShapeSplit(n);
+        if (chair === 'left') idx = sideCnt > 0 ? Math.floor(sideCnt / 2) : 0;
+        else if (chair === 'bottom') idx = sideCnt + Math.floor(bottomCnt / 2);
+        else if (chair === 'right') idx = sideCnt > 0 ? sideCnt + bottomCnt + Math.floor(sideCnt / 2) : Math.max(0, n - 1);
+        else if (chair === 'top') idx = side >= 1 ? n : 0;
+      } else if (type === 'round' || type === 'oval') {
+        if (chair === 'top') idx = 0;
+        else if (chair === 'right') idx = Math.round(n * 0.25) % n;
+        else if (chair === 'bottom') idx = Math.round(n * 0.5) % n;
+        else if (chair === 'left') idx = Math.round(n * 0.75) % n;
+      } else {
+        if (chair === 'left') idx = 0;
+        else if (chair === 'right') idx = Math.max(0, n - 1);
+        else idx = Math.floor(n / 2);
+      }
+      arr[Math.min(idx, arr.length - 1)].role = 'chairman';
+    }
+    return arr;
+  }
+
+  // 幾何位置與旋轉角度計算 (含圓桌/橢圓/講堂扇形旋轉)
+  function positions(t) {
+    const normal = t.seats.filter(s => s.role !== 'side');
+    const side = t.seats.filter(s => s.role === 'side');
+    const pos = {};
+
+    if (t.type === 'round' || t.type === 'oval') {
+      const rx = t.w / 2 + 36;
+      const ry = t.h / 2 + 28;
+      normal.forEach((s, i) => {
+        const a = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(1, normal.length);
+        pos[s.id] = {
+          x: t.w / 2 + rx * Math.cos(a) - 35,
+          y: t.h / 2 + ry * Math.sin(a) - 18,
+          rotation: (a * 180 / Math.PI) + 90
+        };
+      });
+    } else if (t.type === 'classroom') {
+      normal.forEach((s, i) => {
+        pos[s.id] = {
+          x: (i + 1) * t.w / (normal.length + 1) - 35,
+          y: t.h + 8,
+          rotation: 0
+        };
+      });
+    } else if (t.type === 'uShape') {
+      const { sideCnt, bottomCnt } = uShapeSplit(normal.length);
+      normal.forEach((s, i) => {
+        if (i < sideCnt) {
+          pos[s.id] = { x: -75, y: (i + 1) * t.h / (sideCnt + 1) - 18, rotation: 90 };
+        } else if (i < sideCnt + bottomCnt) {
+          const k = i - sideCnt;
+          pos[s.id] = { x: (k + 1) * t.w / (bottomCnt + 1) - 35, y: t.h + 8, rotation: 0 };
+        } else {
+          const k = i - sideCnt - bottomCnt;
+          pos[s.id] = { x: t.w + 5, y: (k + 1) * t.h / (sideCnt + 1) - 18, rotation: -90 };
+        }
+      });
+    } else if (t.type === 'hollowSquare') {
+      const counts = hollowCounts(normal.length);
+      let cursor = 0;
+      counts.forEach((cnt, sideIdx) => {
+        for (let k = 0; k < cnt; k++) {
+          const s = normal[cursor++];
+          if (!s) break;
+          if (sideIdx === 0) pos[s.id] = { x: (k + 1) * t.w / (cnt + 1) - 35, y: -45, rotation: 180 };
+          else if (sideIdx === 1) pos[s.id] = { x: t.w + 5, y: (k + 1) * t.h / (cnt + 1) - 18, rotation: -90 };
+          else if (sideIdx === 2) pos[s.id] = { x: (k + 1) * t.w / (cnt + 1) - 35, y: t.h + 8, rotation: 0 };
+          else pos[s.id] = { x: -75, y: (k + 1) * t.h / (cnt + 1) - 18, rotation: 90 };
+        }
+      });
+    } else if (t.type === 'auditoriumRow') {
+      const count = normal.length;
+      const angleSpan = (t.angleSpan || 80) * (Math.PI / 180);
+      const startAngle = (Math.PI / 2) - (angleSpan / 2);
+      const r = t.radius || 250;
+      normal.forEach((s, i) => {
+        const theta = count <= 1 ? Math.PI / 2 : startAngle + (angleSpan * i / (count - 1));
+        pos[s.id] = {
+          x: t.w / 2 + r * Math.cos(theta) - 35,
+          y: r * Math.sin(theta) - 18,
+          rotation: (theta * 180 / Math.PI) - 90
+        };
+      });
+    } else {
+      const top = Math.ceil(normal.length / 2);
+      const bottom = normal.length - top;
+      normal.forEach((s, i) => {
+        if (i < top) {
+          pos[s.id] = { x: (i + 1) * t.w / (top + 1) - 35, y: -45, rotation: 180 };
+        } else {
+          const k = i - top;
+          pos[s.id] = { x: (k + 1) * t.w / (bottom + 1) - 35, y: t.h + 8, rotation: 0 };
+        }
+      });
+    }
+
+    // 側面加位：若為 U 型或口字型，外側已有一般席位，則排於外二排避免重疊
+    const hasSideNormal = t.type === 'uShape' || t.type === 'hollowSquare';
+    const leftX = hasSideNormal ? -122 : -76;
+    const rightX = hasSideNormal ? t.w + 52 : t.w + 6;
+    const leftSide = [];
+    const rightSide = [];
+    side.forEach((s, i) => (i % 2 === 0 ? leftSide : rightSide).push(s));
+    leftSide.forEach((s, k) => {
+      pos[s.id] = { x: leftX, y: (k + 1) * t.h / (leftSide.length + 1) - 18, rotation: 90 };
+    });
+    rightSide.forEach((s, k) => {
+      pos[s.id] = { x: rightX, y: (k + 1) * t.h / (rightSide.length + 1) - 18, rotation: -90 };
+    });
+
+    return pos;
+  }
+
+  // SAT 分離軸定理檢查旋轉席位是否重疊
+  function seatAxesCorners(cx, cy, hw, hh, deg) {
+    const rad = (deg || 0) * Math.PI / 180;
+    const c = Math.cos(rad);
+    const s = Math.sin(rad);
+    const ux = c, uy = s;
+    const vx = -s, vy = c;
+    return {
+      cx, cy, ux, uy, vx, vy,
+      corners: [
+        [cx + ux * hw + vx * hh, cy + uy * hw + vy * hh],
+        [cx - ux * hw + vx * hh, cy - uy * hw + vy * hh],
+        [cx - ux * hw - vx * hh, cy - uy * hw - vy * hh],
+        [cx + ux * hw - vx * hh, cy + uy * hw - vy * hh]
+      ]
+    };
+  }
+
+  function boxesOverlapSAT(a, b) {
+    const axes = [
+      [a.ux, a.uy], [a.vx, a.vy],
+      [b.ux, b.uy], [b.vx, b.vy]
+    ];
+    for (const [ax, ay] of axes) {
+      let minA = Infinity, maxA = -Infinity;
+      for (const [px, py] of a.corners) {
+        const p = px * ax + py * ay;
+        if (p < minA) minA = p;
+        if (p > maxA) maxA = p;
+      }
+      let minB = Infinity, maxB = -Infinity;
+      for (const [px, py] of b.corners) {
+        const p = px * ax + py * ay;
+        if (p < minB) minB = p;
+        if (p > maxB) maxB = p;
+      }
+      if (maxA <= minB || maxB <= minA) return false;
+    }
+    return true;
+  }
+
+  function detectSeatOverlaps(tableList = tables) {
+    const boxes = [];
+    tableList.forEach(t => {
+      const p = positions(t);
+      t.seats.forEach(s => {
+        const q = p[s.id];
+        if (!q) return;
+        boxes.push({
+          id: s.id,
+          box: seatAxesCorners(t.x + q.x + 35, t.y + q.y + 18, 33.5, 16.5, q.rotation || 0)
+        });
+      });
+    });
+
+    const overlapping = new Set();
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const dx = boxes[i].box.cx - boxes[j].box.cx;
+        const dy = boxes[i].box.cy - boxes[j].box.cy;
+        if (dx * dx + dy * dy > 6400) continue; // > 80px 快速略過
+        if (boxesOverlapSAT(boxes[i].box, boxes[j].box)) {
+          overlapping.add(boxes[i].id);
+          overlapping.add(boxes[j].id);
+        }
+      }
+    }
+    return overlapping;
+  }
+
+  function refreshOverlapMarkers() {
+    const overlaps = detectSeatOverlaps();
+    room.querySelectorAll('.seat').forEach(se => {
+      se.classList.toggle('overlap', overlaps.has(se.dataset.seat));
+    });
+    updateStatus(overlaps.size);
+  }
+
+  // 僅更新選取樣式與側欄欄位，不重建 DOM (確保拖曳穩定)
+  function syncSelectionUI() {
+    stageEl.classList.toggle('selected', selectedStruct === 'stage');
+    room.querySelectorAll('.structObj').forEach(el => {
+      el.classList.toggle('selected', el.dataset.id === selectedStruct);
+    });
+    room.querySelectorAll('.tableObj').forEach(el => {
+      el.classList.toggle('selected', el.dataset.id === selectedTable);
+    });
+    room.querySelectorAll('.seat').forEach(el => {
+      el.classList.toggle('selected', el.dataset.seat === selectedSeat);
+    });
+  }
+
+  function structSvgMarkup(st) {
+    if (st.type.startsWith('wall')) {
+      return `<div class="structWall" style="width:100%;height:100%;"></div>`;
+    }
+    if (st.type === 'door-single') {
+      return `
+        <svg width="${st.w}" height="${st.h}" viewBox="0 0 ${st.w} ${st.h}">
+          <path d="M 0,${st.h} A ${st.w} ${st.h} 0 0 1 ${st.w},0" fill="none" stroke="#2563a6" stroke-width="2" stroke-dasharray="4,3"/>
+          <line x1="0" y1="0" x2="0" y2="${st.h}" stroke="#334155" stroke-width="4"/>
+          <line x1="0" y1="${st.h}" x2="${st.w}" y2="${st.h}" stroke="#94a3b8" stroke-width="1"/>
+          <text x="${st.w / 2}" y="${st.h - 6}" font-size="10" fill="#475569" text-anchor="middle">${esc(st.label || '門')}</text>
+        </svg>`;
+    }
+    if (st.type === 'door-double') {
+      const hw = st.w / 2;
+      return `
+        <svg width="${st.w}" height="${st.h}" viewBox="0 0 ${st.w} ${st.h}">
+          <path d="M 0,${st.h} A ${hw} ${st.h} 0 0 1 ${hw},0" fill="none" stroke="#2563a6" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <path d="M ${st.w},${st.h} A ${hw} ${st.h} 0 0 0 ${hw},0" fill="none" stroke="#2563a6" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <line x1="0" y1="0" x2="0" y2="${st.h}" stroke="#334155" stroke-width="3"/>
+          <line x1="${st.w}" y1="0" x2="${st.w}" y2="${st.h}" stroke="#334155" stroke-width="3"/>
+          <line x1="0" y1="${st.h}" x2="${st.w}" y2="${st.h}" stroke="#94a3b8" stroke-width="1"/>
+          <text x="${hw}" y="${st.h - 6}" font-size="10" fill="#475569" text-anchor="middle">${esc(st.label || '雙開門')}</text>
+        </svg>`;
+    }
+    if (st.type === 'pillar-round') {
+      return `<div class="structPillar round" style="width:100%;height:100%;"></div>`;
+    }
+    return `<div class="structPillar" style="width:100%;height:100%;"></div>`;
+  }
+
+  // 繪製與渲染畫布
+  function render() {
+    room.querySelectorAll('.tableObj, .structObj').forEach(el => el.remove());
+
+    const rw = clamp(+$('roomW').value || 1200, 600, 3600);
+    const rh = clamp(+$('roomH').value || 800, 500, 3000);
+    room.style.width = rw + 'px';
+    room.style.height = rh + 'px';
+
+    // 渲染講台
+    stageEl.style.left = stageConfig.x + 'px';
+    stageEl.style.top = stageConfig.y + 'px';
+    stageEl.style.width = stageConfig.w + 'px';
+    stageEl.style.height = stageConfig.h + 'px';
+    stageEl.textContent = $('stageText').value || stageConfig.text;
+
+    // 渲染結構物件
+    structures.forEach(st => {
+      const el = document.createElement('div');
+      el.className = 'structObj';
+      el.dataset.id = st.id;
+      Object.assign(el.style, {
+        left: st.x + 'px',
+        top: st.y + 'px',
+        width: st.w + 'px',
+        height: st.h + 'px'
+      });
+      el.innerHTML = structSvgMarkup(st);
+      el.onpointerdown = e => startDrag(e, st.id, 'struct');
+      room.appendChild(el);
+    });
+
+    const overlaps = detectSeatOverlaps();
+
+    // 渲染桌位與席位
+    tables.forEach(t => {
+      const el = document.createElement('div');
+      el.className = 'tableObj ' + t.type;
+      el.dataset.id = t.id;
+      Object.assign(el.style, {
+        left: t.x + 'px',
+        top: t.y + 'px',
+        width: t.w + 'px',
+        height: t.h + 'px'
+      });
+
+      const sh = document.createElement('div');
+      sh.className = 'tableShape';
+      if (t.type === 'auditoriumRow') {
+        const labelTop = Math.max(0, (t.radius || 250) - 52);
+        sh.style.top = labelTop + 'px';
+        sh.innerHTML = `<span class="tableLabel">${esc(t.name)} (${t.seats.length}席)</span>`;
+      } else {
+        sh.innerHTML = `<span class="tableLabel">${esc(t.name)}<br><small style="font-weight:normal;opacity:0.85">${t.seats.length}席</small></span>`;
+      }
+      el.appendChild(sh);
+
+      const p = positions(t);
+      t.seats.forEach(s => {
+        const q = p[s.id];
+        if (!q) return;
+        const se = document.createElement('div');
+        se.className = `seat ${s.role}` + (overlaps.has(s.id) ? ' overlap' : '');
+        se.dataset.seat = s.id;
+        se.style.left = q.x + 'px';
+        se.style.top = q.y + 'px';
+        se.style.transform = `rotate(${q.rotation || 0}deg)`;
+        se.innerHTML = `<span class="no">${esc(s.no)}</span><span class="name">${esc(s.name || '空席')}</span>`;
+        se.title = `${t.name}｜${s.no}號席${s.name ? '：' + s.name : ''}`;
+        se.onpointerdown = e => e.stopPropagation();
+        se.onclick = e => {
+          e.stopPropagation();
+          selectSeat(t.id, s.id);
+        };
+        el.appendChild(se);
+      });
+
+      el.onpointerdown = e => startDrag(e, t.id, 'table');
+      room.appendChild(el);
+    });
+
+    syncSelectionUI();
+    updateStatus(overlaps.size);
+    saveLocal();
+  }
+
+  // 高效拖曳處理 (不重建 DOM，避免 pointerCapture 失效)
+  function startDrag(e, id, kind) {
+    if (e.button !== 0) return;
+    if (e.target.closest('.seat')) return;
+    e.stopPropagation();
+    const targetEl = e.currentTarget;
+    let obj;
+    if (kind === 'table') {
+      selectTable(id, true);
+      obj = tables.find(x => x.id === id);
+    } else if (kind === 'struct') {
+      selectStruct(id, true);
+      obj = structures.find(x => x.id === id);
+    } else if (kind === 'stage') {
+      selectedStruct = 'stage';
+      selectedTable = selectedSeat = null;
+      syncSelectionUI();
+      obj = stageConfig;
+    }
+    if (!obj) return;
+
+    drag = {
+      kind,
+      obj,
+      el: targetEl,
+      sx: e.clientX,
+      sy: e.clientY,
+      ox: obj.x,
+      oy: obj.y,
+      moved: false
+    };
+    try { targetEl.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  stageEl.onpointerdown = e => startDrag(e, 'stage', 'stage');
+
+  // 點擊空白畫布取消選取
+  room.addEventListener('pointerdown', e => {
+    if (e.target === room) {
+      selectedTable = selectedSeat = selectedStruct = null;
+      syncSelectionUI();
+    }
+  });
+  roomWrap.addEventListener('pointerdown', e => {
+    if (e.target === roomWrap) {
+      selectedTable = selectedSeat = selectedStruct = null;
+      syncSelectionUI();
+    }
+  });
+
+  window.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = (e.clientX - drag.sx) / zoom;
+    const dy = (e.clientY - drag.sy) / zoom;
+    if (!drag.moved && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+      pushHistory();
+      drag.moved = true;
+    }
+    const maxX = Math.max(0, (+$('roomW').value || 1200) - (drag.kind === 'table' ? Math.min(drag.obj.w || 0, 400) : (drag.obj.w || 0)));
+    const maxY = Math.max(0, (+$('roomH').value || 800) - (drag.kind === 'table' ? Math.min(drag.obj.h || 0, 400) : (drag.obj.h || 0)));
+    drag.curX = clamp(Math.round(drag.ox + dx), 0, maxX);
+    drag.curY = clamp(Math.round(drag.oy + dy), 0, maxY);
+    drag.el.style.left = drag.curX + 'px';
+    drag.el.style.top = drag.curY + 'px';
+  });
+
+  function finishDrag() {
+    if (!drag) return;
+    if (drag.curX !== undefined && drag.moved) {
+      drag.obj.x = drag.curX;
+      drag.obj.y = drag.curY;
+      refreshOverlapMarkers();
+      saveLocal();
+    }
+    drag = null;
+  }
+
+  window.addEventListener('pointerup', finishDrag);
+  window.addEventListener('pointercancel', finishDrag);
+
+  // 選取切換
+  function selectTable(id, skipRender = false) {
+    selectedTable = id;
+    selectedSeat = null;
+    selectedStruct = null;
+    const t = tables.find(x => x.id === id);
+    if (t) {
+      $('tableType').value = t.type;
+      $('tableName').value = t.name;
+      $('seatCount').value = t.seats.filter(s => s.role !== 'side').length;
+      $('sideCount').value = t.seats.filter(s => s.role === 'side').length;
+      $('chairPos').value = t.chair || 'none';
+    }
+    if (skipRender) syncSelectionUI();
+    else render();
+  }
+
+  function selectSeat(tid, sid) {
+    selectedTable = tid;
+    selectedSeat = sid;
+    selectedStruct = null;
+    const t = tables.find(x => x.id === tid);
+    const s = t?.seats.find(x => x.id === sid);
+    if (s) {
+      $('seatName').value = s.name;
+      $('seatRole').value = s.role;
+      $('seatNo').value = s.no;
+    }
+    switchTab('tab-table');
+    syncSelectionUI();
+    $('seatName').focus();
+    $('seatName').select();
+  }
+
+  function selectStruct(id, skipRender = false) {
+    selectedStruct = id;
+    selectedTable = selectedSeat = null;
+    const st = structures.find(x => x.id === id);
+    if (st) {
+      $('structType').value = st.type;
+      $('structLabel').value = st.label || '';
+      $('structW').value = st.w;
+      $('structH').value = st.h;
+      switchTab('tab-struct');
+    }
+    if (skipRender) syncSelectionUI();
+    else render();
+  }
+
+  // 桌位新增 / 更新 / 刪除
+  function addTable(recordHistory = true) {
+    if (recordHistory) pushHistory();
+    const type = $('tableType').value;
+    const n = Math.max(1, +$('seatCount').value || 1);
+    const side = Math.max(0, +$('sideCount').value || 0);
+    const chair = $('chairPos').value;
+    const size = computeTableSize(type, n, side);
+
+    const newT = {
+      id: uid(),
+      name: $('tableName').value.trim() || `第${tables.length + 1}桌`,
+      type,
+      x: 100 + (tables.length % 3) * 380,
+      y: 120 + Math.floor(tables.length / 3) * 280,
+      w: size.w,
+      h: size.h,
+      chair,
+      seats: makeSeats(n, side, chair, type)
+    };
+    tables.push(newT);
+    render();
+    selectTable(newT.id, true);
+  }
+
+  function updateTable() {
+    const t = tables.find(x => x.id === selectedTable);
+    if (!t) return alert('請先點選畫布上的桌位！');
+    pushHistory();
+    const type = $('tableType').value;
+    const n = Math.max(1, +$('seatCount').value || 1);
+    const side = Math.max(0, +$('sideCount').value || 0);
+    const chair = $('chairPos').value;
+    const size = computeTableSize(type, n, side);
+
+    t.name = $('tableName').value.trim() || t.name;
+    t.type = type;
+    t.w = size.w;
+    t.h = size.h;
+    t.chair = chair;
+
+    // 分離一般席與加位席保留姓名與 VIP 身分，同時避免殘留舊主席位
+    const oldNormal = (t.seats || []).filter(s => s.role !== 'side');
+    const oldSide = (t.seats || []).filter(s => s.role === 'side');
+    const neu = makeSeats(n, side, chair, type);
+    let nIdx = 0;
+    let sIdx = 0;
+    neu.forEach(s => {
+      if (s.role === 'side') {
+        const prev = oldSide[sIdx++];
+        if (prev) {
+          s.name = prev.name;
+          s.no = prev.no;
+        }
+      } else {
+        const prev = oldNormal[nIdx++];
+        if (prev) {
+          s.name = prev.name;
+          s.no = prev.no;
+          if (prev.role === 'vip' && s.role !== 'chairman') s.role = 'vip';
+        }
+      }
+    });
+    t.seats = neu;
+    render();
+  }
+
+  function deleteTable() {
+    if (!selectedTable) return;
+    pushHistory();
+    tables = tables.filter(x => x.id !== selectedTable);
+    selectedTable = selectedSeat = null;
+    render();
+  }
+
+  function duplicateTable() {
+    const t = tables.find(x => x.id === selectedTable);
+    if (!t) return;
+    pushHistory();
+    const c = JSON.parse(JSON.stringify(t));
+    c.id = uid();
+    c.name = t.name + ' (複本)';
+    c.x += 40;
+    c.y += 40;
+    c.seats.forEach(s => s.id = uid());
+    tables.push(c);
+    selectTable(c.id);
+  }
+
+  function applySeat() {
+    const t = tables.find(x => x.id === selectedTable);
+    const s = t?.seats.find(x => x.id === selectedSeat);
+    if (!s) return alert('請先在畫布上點選要編輯的具體席位！');
+    pushHistory();
+    s.name = $('seatName').value.trim();
+    s.no = $('seatNo').value.trim() || s.no;
+    s.role = $('seatRole').value;
+    render();
+  }
+
+  // 結構物件預設尺寸聯動與操作
+  const structDefaults = {
+    'wall-h': { w: 120, h: 14, label: '隔間牆' },
+    'wall-v': { w: 14, h: 160, label: '垂直隔間牆' },
+    'door-single': { w: 90, h: 90, label: '進出大門' },
+    'door-double': { w: 100, h: 80, label: '雙開大門' },
+    'pillar-round': { w: 40, h: 40, label: '圓形立柱' },
+    'pillar-square': { w: 40, h: 40, label: '方形立柱' }
+  };
+
+  $('structType').addEventListener('change', () => {
+    const def = structDefaults[$('structType').value];
+    if (def && !selectedStruct) {
+      $('structW').value = def.w;
+      $('structH').value = def.h;
+    }
+  });
+
+  function addStruct() {
+    pushHistory();
+    const type = $('structType').value;
+    const def = structDefaults[type] || { w: 120, h: 14 };
+    const w = Math.max(8, +$('structW').value || def.w);
+    const h = Math.max(8, +$('structH').value || def.h);
+
+    const st = {
+      id: uid(),
+      type,
+      label: $('structLabel').value,
+      x: 80 + (structures.length * 40) % 300,
+      y: 100 + (structures.length * 30) % 200,
+      w,
+      h
+    };
+    structures.push(st);
+    render();
+    selectStruct(st.id, true);
+  }
+
+  function updateStruct() {
+    if (selectedStruct === 'stage') {
+      return alert('講台標題請於「場地設定」頁籤修改，位置可直接拖曳移動。');
+    }
+    const st = structures.find(x => x.id === selectedStruct);
+    if (!st) return alert('請先點選欲更新的結構物件');
+    pushHistory();
+    st.type = $('structType').value;
+    st.label = $('structLabel').value;
+    st.w = Math.max(8, +$('structW').value || st.w);
+    st.h = Math.max(8, +$('structH').value || st.h);
+    render();
+  }
+
+  function deleteStruct() {
+    if (!selectedStruct || selectedStruct === 'stage') {
+      if (selectedStruct === 'stage') alert('講台為核心區無法刪除，可拖曳移動或於「場地設定」修改標題。');
+      return;
+    }
+    pushHistory();
+    structures = structures.filter(x => x.id !== selectedStruct);
+    selectedStruct = null;
+    render();
+  }
+
+  // 快速加入左右側進出門
+  $('quickAddDoorLeft').onclick = () => {
+    pushHistory();
+    structures.push({ id: uid(), type: 'door-single', label: '入口大門', x: 10, y: 120, w: 80, h: 80 });
+    render();
+  };
+  $('quickAddDoorRight').onclick = () => {
+    pushHistory();
+    structures.push({ id: uid(), type: 'door-double', label: '出口安全門', x: Math.max(10, +$('roomW').value - 110), y: 120, w: 100, h: 80 });
+    render();
+  };
+
+  // 內建座位版型：單一資料來源驅動目錄、即時向量預覽與套用
+  let selectedTemplateKey = null;
+  let templateCategory = 'all';
+
+  function seatTable(name, type, x, y, count, side = 0, chair = 'none', extra = {}) {
+    const size = computeTableSize(type, count, side, extra.w, extra.h);
+    return {
+      id: uid(),
+      name,
+      type,
+      x,
+      y,
+      ...extra,
+      w: size.w,
+      h: size.h,
+      chair,
+      seats: makeSeats(count, side, chair, type)
+    };
+  }
+
+  function buildTemplateData(key) {
+    const roomCfg = (name, w, h, stageText = '講台區 / 主席台') => ({
+      meetingName: name,
+      roomW: w,
+      roomH: h,
+      stage: { x: Math.round((w - 360) / 2), y: 18, w: 360, h: 52, text: stageText },
+      structures: [
+        { id: uid(), type: 'door-single', label: '入口', x: 12, y: 110, w: 85, h: 85 },
+        { id: uid(), type: 'door-double', label: '出口', x: w - 112, y: 110, w: 100, h: 80 }
+      ],
+      tables: []
+    });
+
+    let d;
+    if (key === 'executive') {
+      d = roomCfg('首長會議座位配置表', 1200, 800);
+      const t = seatTable('首長會議桌', 'uShape', 0, 145, 20, 4, 'bottom');
+      t.x = Math.round((d.roomW - t.w) / 2);
+      d.tables.push(t);
+    } else if (key === 'committee') {
+      d = roomCfg('委員會議座位配置表', 1200, 800);
+      const t = seatTable('委員會議桌', 'hollowSquare', 0, 180, 20, 0, 'top');
+      t.x = Math.round((d.roomW - t.w) / 2);
+      d.tables.push(t);
+    } else if (key === 'boardroom') {
+      d = roomCfg('董事會／主管會報座位配置表', 1100, 700);
+      const t = seatTable('主管會議桌', 'rect', 0, 225, 13, 1, 'left', { w: 360, h: 170 });
+      t.x = Math.round((d.roomW - t.w) / 2);
+      d.tables.push(t);
+    } else if (key === 'negotiation') {
+      d = roomCfg('雙邊談判座位配置表', 1200, 760);
+      const t1 = seatTable('甲方代表席', 'classroom', 0, 230, 8, 0, 'none', { w: 540, h: 55 });
+      const t2 = seatTable('乙方代表席', 'classroom', 0, 405, 8, 0, 'none', { w: 540, h: 55 });
+      t1.x = t2.x = Math.round((d.roomW - t1.w) / 2);
+      d.tables.push(t1, t2);
+    } else if (key === 'video') {
+      d = roomCfg('視訊會議座位配置表', 1100, 720, '視訊螢幕 / Camera');
+      const t = seatTable('視訊會議桌', 'rect', 0, 235, 11, 1, 'left', { w: 340, h: 160 });
+      t.x = Math.round((d.roomW - t.w) / 2);
+      d.tables.push(t);
+    } else if (key === 'classroom') {
+      d = roomCfg('教育訓練座位配置表', 1300, 950);
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 3; c++) {
+          d.tables.push(seatTable(`${r + 1}排-${c + 1}組`, 'classroom', 150 + c * 350 + (c > 1 ? 80 : 0), 170 + r * 145, 2));
+        }
+      }
+    } else if (key === 'exam') {
+      d = roomCfg('考試／甄試座位配置表', 1400, 1000);
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 6; c++) {
+          d.tables.push(seatTable(`${r + 1}排-${c + 1}號`, 'classroom', 95 + c * 205, 175 + r * 190, 1, 0, 'none', { w: 90, h: 50 }));
+        }
+      }
+    } else if (key === 'workshop') {
+      d = roomCfg('工作坊分組座位配置表', 1500, 1000);
+      [[260, 230], [650, 230], [1040, 230], [260, 610], [650, 610], [1040, 610]].forEach((q, i) => {
+        d.tables.push(seatTable(`第${i + 1}組`, 'round', q[0], q[1], 6));
+      });
+    } else if (key === 'briefing') {
+      d = roomCfg('簡報／記者會座位配置表', 1300, 900);
+      const vip = seatTable('貴賓席', 'classroom', 430, 130, 4, 0, 'none', { w: 440, h: 60 });
+      vip.seats.forEach(x => { x.role = 'vip'; });
+      d.tables.push(vip);
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 3; c++) {
+          d.tables.push(seatTable(`${r + 1}排-${c + 1}組`, 'classroom', 100 + c * 365 + (c > 1 ? 60 : 0), 300 + r * 135, r === 0 ? 2 : 3));
+        }
+      }
+    } else if (key === 'panel') {
+      d = roomCfg('論壇／座談會座位配置表', 1420, 950);
+      const panel = seatTable('與談人席', 'classroom', 450, 120, 5, 0, 'none', { w: 520, h: 60 });
+      panel.seats.forEach(x => { x.role = 'vip'; });
+      d.tables.push(panel);
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 3; c++) {
+          d.tables.push(seatTable(`${r + 1}排-${c + 1}區`, 'classroom', 85 + c * 420 + (c > 1 ? 65 : 0), 305 + r * 145, r < 2 ? 3 : 4));
+        }
+      }
+    } else if (key === 'banquet') {
+      d = roomCfg('圓桌會議／餐敘座位配置表', 1500, 1000);
+      [[250, 220], [640, 220], [1030, 220], [250, 590], [640, 590], [1030, 590]].forEach((q, i) => {
+        d.tables.push(seatTable(`第${i + 1}桌`, 'round', q[0], q[1], 8, 0, i === 0 ? 'top' : 'none'));
+      });
+    } else if (key === 'auditorium') {
+      d = roomCfg('大型講堂座位配置表', 1500, 1100);
+      const cx = 750;
+      for (let r = 0; r < 5; r++) {
+        const radius = 285 + r * 95;
+        const count = 8 + r * 2;
+        const span = 110;
+        const arc = Math.round(2 * radius * Math.sin(span * Math.PI / 360)) + 60;
+        d.tables.push(seatTable(`第 ${r + 1} 排`, 'auditoriumRow', Math.round(cx - arc / 2), 105, count, 0, 'none', { w: arc, h: 24, radius, angleSpan: span }));
+      }
+    }
+    return d;
+  }
+
+  const templateMeta = [
+    { key: 'executive', name: '首長會議', icon: '🏛️', category: 'meeting', desc: 'U 型主桌，主席置中，兩側可安排列席人員。', tags: '首長 U型 主席 決策' },
+    { key: 'committee', name: '委員會議', icon: '🗳️', category: 'meeting', desc: '口字型會議桌，中央留白，適合逐案審議。', tags: '委員 審查 口字型' },
+    { key: 'boardroom', name: '董事會／主管會報', icon: '📊', category: 'meeting', desc: '單一長桌雙側對坐，主席位於短邊前端。', tags: '董事會 主管 長桌' },
+    { key: 'negotiation', name: '雙邊談判／協商', icon: '🤝', category: 'meeting', desc: '雙方代表平行對坐，結構清晰對稱。', tags: '談判 協商 雙邊 對坐' },
+    { key: 'video', name: '視訊會議室', icon: '🖥️', category: 'meeting', desc: '長桌面向前方視訊螢幕，保留攝影機視角。', tags: '視訊 混合 線上' },
+    { key: 'classroom', name: '教育訓練', icon: '🏫', category: 'training', desc: '5 排 × 3 欄雙人桌，配置中央走道。', tags: '教室 訓練 課程' },
+    { key: 'exam', name: '考試／甄試', icon: '📝', category: 'training', desc: '單人單桌、加大間距，保留前後監考動線。', tags: '考試 甄試 單人桌' },
+    { key: 'workshop', name: '工作坊分組', icon: '🧠', category: 'training', desc: '6 個島型小組，每組 6 人，適合共同創作。', tags: '工作坊 分組 島型' },
+    { key: 'briefing', name: '簡報／記者會', icon: '🎤', category: 'event', desc: '前排貴賓席搭配課堂座位及中央走道。', tags: '簡報 記者會 貴賓' },
+    { key: 'panel', name: '論壇／座談會', icon: '💬', category: 'event', desc: '舞台上 5 位與談人，台下 4 排觀眾席。', tags: '論壇 座談 與談人' },
+    { key: 'auditorium', name: '大型講堂', icon: '🏟️', category: 'event', desc: '5 排扇形座位，逐排增加席次並朝向舞台。', tags: '講堂 弧形 大型' },
+    { key: 'banquet', name: '圓桌會議／餐敘', icon: '🍽️', category: 'special', desc: '6 張圓桌，每桌 8 人，適合交流或餐敘。', tags: '圓桌 餐敘 宴會' }
+  ];
+
+  // 從真實版型產生精準數據與預覽，確保席數與圖示永不失真
+  const templateCache = new Map();
+  function getTemplateSnapshot(key) {
+    if (!templateCache.has(key)) {
+      const data = buildTemplateData(key);
+      const seats = data.tables.reduce((sum, t) => sum + t.seats.length, 0);
+      templateCache.set(key, {
+        data,
+        seats,
+        tables: data.tables.length,
+        size: `${data.roomW}×${data.roomH}`
+      });
+    }
+    return templateCache.get(key);
+  }
+
+  const templateCatalog = templateMeta.map(m => {
+    const snap = getTemplateSnapshot(m.key);
+    return { ...m, seats: snap.seats, tables: snap.tables, size: snap.size };
+  });
+
+  function renderTableSvgShape(t) {
+    if (t.type === 'round') {
+      return `<circle cx="${t.x + t.w / 2}" cy="${t.y + t.h / 2}" r="${t.w / 2}" fill="#fbf3d5" stroke="#8b5e34" stroke-width="3"/>`;
+    }
+    if (t.type === 'oval') {
+      return `<ellipse cx="${t.x + t.w / 2}" cy="${t.y + t.h / 2}" rx="${t.w / 2}" ry="${t.h / 2}" fill="#fbf3d5" stroke="#8b5e34" stroke-width="3"/>`;
+    }
+    if (t.type === 'uShape') {
+      const bw = 22;
+      return `<path d="M ${t.x + bw / 2},${t.y} V ${t.y + t.h - bw / 2} H ${t.x + t.w - bw / 2} V ${t.y}" fill="none" stroke="#8b5e34" stroke-width="${bw}" stroke-linejoin="round"/>
+              <path d="M ${t.x + bw / 2},${t.y} V ${t.y + t.h - bw / 2} H ${t.x + t.w - bw / 2} V ${t.y}" fill="none" stroke="#fbf3d5" stroke-width="${bw - 5}" stroke-linejoin="round"/>`;
+    }
+    if (t.type === 'hollowSquare') {
+      const bw = 22;
+      return `<rect x="${t.x + bw / 2}" y="${t.y + bw / 2}" width="${t.w - bw}" height="${t.h - bw}" rx="6" fill="none" stroke="#8b5e34" stroke-width="${bw}"/>
+              <rect x="${t.x + bw / 2}" y="${t.y + bw / 2}" width="${t.w - bw}" height="${t.h - bw}" rx="6" fill="none" stroke="#fbf3d5" stroke-width="${bw - 5}"/>`;
+    }
+    if (t.type === 'classroom') {
+      return `<rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx="4" fill="#e2e8f0" stroke="#475569" stroke-width="2"/>`;
+    }
+    if (t.type === 'auditoriumRow') {
+      const r = t.radius || 250;
+      const span = (t.angleSpan || 80) * Math.PI / 180;
+      const a1 = Math.PI / 2 - span / 2;
+      const a2 = Math.PI / 2 + span / 2;
+      const cx = t.x + t.w / 2;
+      const cy = t.y;
+      const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+      return `<path d="M ${x1.toFixed(1)},${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)},${y2.toFixed(1)}" fill="none" stroke="#cbd5e1" stroke-width="10" stroke-linecap="round"/>`;
+    }
+    return `<rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" rx="6" fill="#fbf3d5" stroke="#8b5e34" stroke-width="2.5"/>`;
+  }
+
+  function previewSvg(key) {
+    const snap = getTemplateSnapshot(key);
+    const d = snap.data;
+    const parts = [
+      `<svg viewBox="0 0 ${d.roomW} ${d.roomH}" aria-label="座位配置預覽">`,
+      `<rect width="${d.roomW}" height="${d.roomH}" fill="#ffffff"/>`,
+      `<rect x="${d.stage.x}" y="${d.stage.y}" width="${d.stage.w}" height="${d.stage.h}" rx="8" fill="#334155"/>`,
+      `<text x="${d.stage.x + d.stage.w / 2}" y="${d.stage.y + d.stage.h / 2 + 8}" text-anchor="middle" font-size="22" font-weight="bold" fill="#ffffff">${esc(d.stage.text)}</text>`
+    ];
+    d.tables.forEach(t => {
+      parts.push(renderTableSvgShape(t));
+      const p = positions(t);
+      t.seats.forEach(s => {
+        const q = p[s.id];
+        if (!q) return;
+        const fill = s.role === 'chairman' ? '#fca5a5' : s.role === 'vip' ? '#d8b4fe' : s.role === 'side' ? '#fde68a' : '#93c5fd';
+        const stroke = s.role === 'chairman' ? '#dc2626' : s.role === 'vip' ? '#7e22ce' : s.role === 'side' ? '#d97706' : '#2563a6';
+        parts.push(`<g transform="translate(${t.x + q.x + 35}, ${t.y + q.y + 18}) rotate(${q.rotation || 0})"><rect x="-35" y="-18" width="70" height="36" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="3"/></g>`);
+      });
+    });
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  function renderTemplateLibrary() {
+    const q = $('templateSearch').value.trim().toLowerCase();
+    const list = templateCatalog.filter(t =>
+      (templateCategory === 'all' || t.category === templateCategory) &&
+      (!q || `${t.name} ${t.desc} ${t.tags}`.toLowerCase().includes(q))
+    );
+    if ($('templateSort').value === 'seatsAsc') list.sort((a, b) => a.seats - b.seats);
+    if ($('templateSort').value === 'seatsDesc') list.sort((a, b) => b.seats - a.seats);
+    $('templateGrid').innerHTML = list.length
+      ? list.map(t => `<button class="template-card${t.key === selectedTemplateKey ? ' selected' : ''}" data-template="${esc(t.key)}"><span class="template-thumb">${esc(t.icon)}</span><span><strong>${esc(t.name)}</strong><span>${esc(t.desc)}</span><span class="mini">${t.seats} 席｜${t.tables} 桌區｜${esc(t.size)}</span></span></button>`).join('')
+      : '<div class="template-empty">找不到符合條件的座位版型</div>';
+    document.querySelectorAll('#templateGrid [data-template]').forEach(b => {
+      b.onclick = () => selectTemplate(b.dataset.template);
+    });
+  }
+
+  function selectTemplate(key) {
+    selectedTemplateKey = key;
+    const t = templateCatalog.find(x => x.key === key);
+    if (!t) return;
+    $('previewTitle').textContent = `${t.icon} ${t.name}`;
+    $('previewCanvas').innerHTML = previewSvg(key);
+    $('previewDesc').textContent = t.desc;
+    $('previewSeats').textContent = t.seats;
+    $('previewTables').textContent = t.tables;
+    $('previewSize').textContent = t.size;
+    $('applySelectedTemplate').disabled = false;
+    renderTemplateLibrary();
+  }
+
+  function applyTemplate(kind) {
+    pushHistory();
+    const d = buildTemplateData(kind);
+    $('templateModal').classList.remove('show');
+    loadProjectData(d);
+    showToast('已套用版型。若需復原，可按 Ctrl+Z 或「復原」。');
+  }
+
+  function showToast(msg) {
+    clearTimeout(toastTimer);
+    $('status').textContent = msg;
+    toastTimer = setTimeout(() => updateStatus(), 2400);
+  }
+
+  $('openTemplateModal').onclick = () => {
+    $('templateModal').classList.add('show');
+    renderTemplateLibrary();
+    if (!selectedTemplateKey) selectTemplate('executive');
+  };
+  $('closeTemplateModal').onclick = () => $('templateModal').classList.remove('show');
+  $('applySelectedTemplate').onclick = () => selectedTemplateKey && applyTemplate(selectedTemplateKey);
+  $('templateSearch').oninput = renderTemplateLibrary;
+  $('templateSort').onchange = renderTemplateLibrary;
+  document.querySelectorAll('.template-filter').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('.template-filter').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      templateCategory = b.dataset.category;
+      renderTemplateLibrary();
+    };
+  });
+
+  window.addEventListener('keydown', e => {
+    const tag = document.activeElement?.tagName;
+    const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !isEditing && undoStack.length) {
+      e.preventDefault();
+      undo();
+    }
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal.show').forEach(m => m.classList.remove('show'));
+    }
+  });
+
+  // 教室矩陣快速生成器
+  function parseNames(raw) {
+    return raw.split(/[\n,、\t ;]+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  $('openClassroomModal').onclick = () => $('classroomModal').classList.add('show');
+  $('closeClassroomModal').onclick = () => $('classroomModal').classList.remove('show');
+
+  $('generateClassroom').onclick = () => {
+    pushHistory();
+    const rows = clamp(+$('crRows').value || 4, 1, 15);
+    const cols = clamp(+$('crCols').value || 3, 1, 10);
+    const seatsPerTable = clamp(+$('crSeatsPerTable').value || 2, 1, 4);
+    const aisle = $('crAisle').value;
+    const names = parseNames($('crNames').value);
+
+    const tableW = seatsPerTable === 1 ? 100 : computeTableSize('classroom', seatsPerTable, 0).w;
+    const tableH = 50;
+    const xGap = 40;
+    const yGap = 58;
+    const startY = stageConfig.y + stageConfig.h + 60;
+
+    let nameIdx = 0;
+    const newTables = [];
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        let aisleOffset = 0;
+        if (aisle === 'center' && cols > 1 && c >= Math.ceil(cols / 2)) {
+          aisleOffset = 80;
+        }
+        const x = 120 + c * (tableW + xGap) + aisleOffset;
+        const y = startY + r * (tableH + yGap);
+
+        const tableSeats = [];
+        for (let s = 0; s < seatsPerTable; s++) {
+          tableSeats.push({
+            id: uid(),
+            no: `R${r + 1}-${c + 1}-${s + 1}`,
+            name: names[nameIdx++] || '',
+            role: 'normal'
+          });
+        }
+
+        newTables.push({
+          id: uid(),
+          name: `${r + 1}排-${c + 1}組`,
+          type: 'classroom',
+          x,
+          y,
+          w: tableW,
+          h: tableH,
+          chair: 'none',
+          seats: tableSeats
+        });
+      }
+    }
+
+    tables.push(...newTables);
+    $('classroomModal').classList.remove('show');
+    render();
+  };
+
+  // 大講堂弧形座位生成器
+  $('openAuditoriumModal').onclick = () => $('auditoriumModal').classList.add('show');
+  $('closeAuditoriumModal').onclick = () => $('auditoriumModal').classList.remove('show');
+
+  $('generateAuditorium').onclick = () => {
+    pushHistory();
+    const numRows = clamp(+$('audRows').value || 4, 1, 12);
+    const startSeats = clamp(+$('audStartSeats').value || 8, 2, 30);
+    const seatStep = clamp(+$('audSeatStep').value ?? 2, 0, 6);
+    const angleSpan = clamp(+$('audAngleSpan').value || 90, 30, 160);
+    const startRadius = clamp(+$('audStartRadius').value || 230, 150, 700);
+    const rowSpacing = clamp(+$('audRowSpacing').value || 70, 50, 140);
+    const names = parseNames($('audNames').value);
+
+    const centerX = stageConfig.x + (stageConfig.w / 2);
+    const centerY = stageConfig.y + (stageConfig.h / 2);
+    const spanRad = angleSpan * (Math.PI / 180);
+
+    let nameIdx = 0;
+    const newTables = [];
+
+    for (let r = 0; r < numRows; r++) {
+      const curSeatsCount = startSeats + r * seatStep;
+      // 確保同排相鄰席位弦距 >= 76px 避免重疊
+      const minSafeR = curSeatsCount > 1
+        ? Math.ceil(76 / (2 * Math.sin(spanRad / (2 * (curSeatsCount - 1)))))
+        : startRadius;
+      const prevR = r > 0 ? newTables[r - 1].radius + rowSpacing : startRadius;
+      const curRadius = Math.max(startRadius + r * rowSpacing, prevR, minSafeR);
+      const arcWidth = Math.round(2 * curRadius * Math.sin(spanRad / 2)) + 60;
+
+      const tObj = {
+        id: uid(),
+        name: `第 ${r + 1} 排`,
+        type: 'auditoriumRow',
+        x: Math.round(centerX - arcWidth / 2),
+        y: Math.round(centerY + 30),
+        w: arcWidth,
+        h: 24,
+        radius: curRadius,
+        angleSpan,
+        chair: 'none',
+        seats: []
+      };
+
+      for (let s = 0; s < curSeatsCount; s++) {
+        tObj.seats.push({
+          id: uid(),
+          no: `${r + 1}排${s + 1}號`,
+          name: names[nameIdx++] || '',
+          role: r === 0 && s === Math.floor(curSeatsCount / 2) ? 'vip' : 'normal'
+        });
+      }
+      newTables.push(tObj);
+    }
+
+    tables.push(...newTables);
+    $('auditoriumModal').classList.remove('show');
+    render();
+  };
+
+  // 批次名單排位 Modal
+  $('openBatchModal').onclick = () => $('batchModal').classList.add('show');
+  $('closeBatchModal').onclick = () => $('batchModal').classList.remove('show');
+
+  $('batchToSelectedTable').onclick = () => {
+    const t = tables.find(x => x.id === selectedTable);
+    if (!t) return alert('請先在畫布上選取一個桌位！');
+    const names = parseNames($('batchNameList').value);
+    if (!names.length) return alert('請先輸入或貼上姓名清單！');
+
+    pushHistory();
+    t.seats.forEach((s, idx) => {
+      if (names[idx] !== undefined) s.name = names[idx];
+    });
+    $('batchModal').classList.remove('show');
+    render();
+  };
+
+  $('batchToAllTables').onclick = () => {
+    const names = parseNames($('batchNameList').value);
+    if (!names.length) return alert('請先輸入或貼上姓名清單！');
+
+    pushHistory();
+    let idx = 0;
+    tables.forEach(t => {
+      t.seats.forEach(s => {
+        if (names[idx] !== undefined) {
+          s.name = names[idx++];
+        }
+      });
+    });
+    $('batchModal').classList.remove('show');
+    render();
+  };
+
+  // 計算桌位含四周席位的外接邊界
+  function tableFootprint(t) {
+    const p = positions(t);
+    let minX = 0, minY = 0, maxX = t.w, maxY = t.h;
+    t.seats.forEach(s => {
+      const q = p[s.id];
+      if (!q) return;
+      const cx = q.x + 35;
+      const cy = q.y + 18;
+      const rad = (q.rotation || 0) * Math.PI / 180;
+      const hw = 35 * Math.abs(Math.cos(rad)) + 18 * Math.abs(Math.sin(rad));
+      const hh = 35 * Math.abs(Math.sin(rad)) + 18 * Math.abs(Math.cos(rad));
+      minX = Math.min(minX, cx - hw);
+      maxX = Math.max(maxX, cx + hw);
+      minY = Math.min(minY, cy - hh);
+      maxY = Math.max(maxY, cy + hh);
+    });
+    return {
+      padL: Math.max(0, -minX),
+      padT: Math.max(0, -minY),
+      totalW: Math.ceil(maxX - minX),
+      totalH: Math.ceil(maxY - minY)
+    };
+  }
+
+  // 自動防重疊流式排列既有常規桌 (依實際含席位外框計算間距)
+  function autoArrange() {
+    pushHistory();
+    const roomW = +$('roomW').value || 1200;
+    const marginX = 50;
+    const gapX = 40;
+    const gapY = 40;
+    let curX = marginX;
+    let curY = Math.max(120, stageConfig.y + stageConfig.h + 50);
+    let rowMaxH = 0;
+
+    tables.forEach(t => {
+      if (t.type === 'auditoriumRow') return;
+      const fp = tableFootprint(t);
+      if (curX > marginX && curX + fp.totalW > roomW - marginX) {
+        curX = marginX;
+        curY += rowMaxH + gapY;
+        rowMaxH = 0;
+      }
+      t.x = Math.round(curX + fp.padL);
+      t.y = Math.round(curY + fp.padT);
+      curX += fp.totalW + gapX;
+      rowMaxH = Math.max(rowMaxH, fp.totalH);
+    });
+    render();
+  }
+
+  function updateStatus(overlapCount = detectSeatOverlaps().size) {
+    const totalSeats = tables.reduce((a, t) => a + t.seats.length, 0);
+    const namedSeats = tables.reduce((a, t) => a + t.seats.filter(s => s.name).length, 0);
+    const baseText = `桌區: ${tables.length}｜總席位: ${totalSeats}｜已排定: ${namedSeats} 人｜結構物: ${structures.length}`;
+    if (overlapCount > 0) {
+      $('status').innerHTML = `${esc(baseText)}｜<span class="overlap-warn">⚠️ 重疊席位: ${overlapCount}</span>`;
+    } else {
+      $('status').textContent = baseText + '｜✅ 零重疊';
+    }
+  }
+
+  // 匯出與匯入資料格式 (含結構驗證防呆)
+  function getProjectData() {
+    return {
+      version: 2,
+      meetingName: $('meetingName').value,
+      roomW: +$('roomW').value || 1200,
+      roomH: +$('roomH').value || 800,
+      stage: stageConfig,
+      structures,
+      tables
+    };
+  }
+
+  function sanitizeProjectData(d) {
+    if (!d || typeof d !== 'object') throw new Error('Invalid project data');
+    const validTypes = new Set(['rect', 'classroom', 'round', 'oval', 'uShape', 'hollowSquare', 'auditoriumRow']);
+    const validRoles = new Set(['normal', 'chairman', 'vip', 'side']);
+    const rw = clamp(Number(d.roomW) || 1200, 600, 3600);
+    const rh = clamp(Number(d.roomH) || 800, 500, 3000);
+    const stg = d.stage && typeof d.stage === 'object' ? d.stage : {};
+    const safeStage = {
+      x: Number.isFinite(Number(stg.x)) ? Number(stg.x) : Math.round((rw - 360) / 2),
+      y: Number.isFinite(Number(stg.y)) ? Number(stg.y) : 16,
+      w: Math.max(80, Number(stg.w) || 360),
+      h: Math.max(30, Number(stg.h) || 52),
+      text: String(stg.text || '講台區 / 主席台 (Stage)')
+    };
+
+    const safeStructs = Array.isArray(d.structures)
+      ? d.structures.filter(s => s && typeof s === 'object').map(s => ({
+          id: String(s.id || uid()),
+          type: String(s.type || 'wall-h'),
+          label: String(s.label ?? ''),
+          x: Number(s.x) || 0,
+          y: Number(s.y) || 0,
+          w: Math.max(8, Number(s.w) || 80),
+          h: Math.max(8, Number(s.h) || 14)
+        }))
+      : [];
+
+    const safeTables = Array.isArray(d.tables)
+      ? d.tables.filter(t => t && typeof t === 'object').map((t, idx) => {
+          const type = validTypes.has(t.type) ? t.type : 'rect';
+          const def = dims(type);
+          const seats = Array.isArray(t.seats)
+            ? t.seats.filter(s => s && typeof s === 'object').map((s, si) => ({
+                id: String(s.id || uid()),
+                no: String(s.no ?? (si + 1)),
+                name: String(s.name ?? ''),
+                role: validRoles.has(s.role) ? s.role : 'normal'
+              }))
+            : [];
+          return {
+            id: String(t.id || uid()),
+            name: String(t.name || `第${idx + 1}桌`),
+            type,
+            x: Number(t.x) || 0,
+            y: Number(t.y) || 0,
+            w: Math.max(40, Number(t.w) || def.w),
+            h: Math.max(20, Number(t.h) || def.h),
+            chair: String(t.chair || 'none'),
+            radius: Number.isFinite(Number(t.radius)) ? Number(t.radius) : undefined,
+            angleSpan: Number.isFinite(Number(t.angleSpan)) ? Number(t.angleSpan) : undefined,
+            seats
+          };
+        })
+      : [];
+
+    return {
+      meetingName: String(d.meetingName || '會議座位配置表'),
+      roomW: rw,
+      roomH: rh,
+      stage: safeStage,
+      structures: safeStructs,
+      tables: safeTables
+    };
+  }
+
+  function loadProjectData(raw) {
+    const d = sanitizeProjectData(raw);
+    $('meetingName').value = d.meetingName;
+    $('roomW').value = d.roomW;
+    $('roomH').value = d.roomH;
+    stageConfig = d.stage;
+    $('stageText').value = stageConfig.text;
+    structures = d.structures;
+    tables = d.tables;
+    selectedTable = selectedSeat = selectedStruct = null;
+    render();
+  }
+
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1200);
+  }
+
+  function safeName() {
+    return ($('meetingName').value || '會議座位表').replace(/[\/:*?"<>|]/g, '_');
+  }
+
+  // 匯出 JSON
+  $('exportJson').onclick = () => {
+    download(new Blob([JSON.stringify(getProjectData(), null, 2)], { type: 'application/json' }), safeName() + '.json');
+  };
+
+  $('importJson').onclick = () => $('jsonFile').click();
+  $('jsonFile').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        pushHistory();
+        loadProjectData(parsed);
+        showToast('已匯入 JSON 配置檔。');
+      } catch (err) {
+        alert('JSON 格式不正確或已毀損');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // 匯出標準 CSV (帶 UTF-8 BOM)
+  $('exportCsv').onclick = () => {
+    const rows = [['場次主題', '桌號/區域名稱', '桌型', '席次編號', '姓名/單位', '席位身分', 'X座標', 'Y座標']];
+    const meeting = $('meetingName').value;
+    const typeMap = {
+      rect: '長方桌', classroom: '課堂桌', round: '圓桌', oval: '橢圓桌',
+      uShape: 'U型桌', hollowSquare: '口字型', auditoriumRow: '大講堂弧形排'
+    };
+    const roleMap = { normal: '一般席', chairman: '主席席', vip: '貴賓席', side: '側面加位' };
+
+    tables.forEach(t => {
+      t.seats.forEach(s => {
+        rows.push([
+          meeting,
+          t.name,
+          typeMap[t.type] || t.type,
+          s.no,
+          s.name,
+          roleMap[s.role] || s.role,
+          t.x,
+          t.y
+        ]);
+      });
+    });
+
+    const csvContent = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    download(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), safeName() + '_席次名單.csv');
+  };
+
+  // 匯出高解析度向量 SVG (標題列獨立不重疊講台，桌型/門結構完整還原)
+  $('exportSvg').onclick = () => {
+    const d = getProjectData();
+    const headerH = 48;
+    const totalH = d.roomH + headerH;
+    const parts = [
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${d.roomW}" height="${totalH}" viewBox="0 0 ${d.roomW} ${totalH}">`,
+      `<rect width="100%" height="100%" fill="#ffffff"/>`,
+      `<text x="${d.roomW / 2}" y="31" text-anchor="middle" font-family="Microsoft JhengHei, sans-serif" font-size="20" font-weight="bold" fill="#0f172a">${esc(d.meetingName)}</text>`,
+      `<g transform="translate(0, ${headerH})">`,
+      `<rect width="${d.roomW}" height="${d.roomH}" fill="#ffffff" stroke="#334155" stroke-width="4"/>`,
+      `<rect x="${stageConfig.x}" y="${stageConfig.y}" width="${stageConfig.w}" height="${stageConfig.h}" rx="6" fill="#334155"/>`,
+      `<text x="${stageConfig.x + stageConfig.w / 2}" y="${stageConfig.y + stageConfig.h / 2 + 5}" text-anchor="middle" fill="#ffffff" font-family="Microsoft JhengHei, sans-serif" font-size="15" font-weight="bold">${esc(stageConfig.text)}</text>`
+    ];
+
+    d.structures.forEach(st => {
+      if (st.type.startsWith('wall')) {
+        parts.push(`<rect x="${st.x}" y="${st.y}" width="${st.w}" height="${st.h}" fill="#334155" rx="2"/>`);
+      } else if (st.type === 'door-single') {
+        parts.push(`<g transform="translate(${st.x}, ${st.y})"><path d="M 0,${st.h} A ${st.w} ${st.h} 0 0 1 ${st.w},0" fill="none" stroke="#2563a6" stroke-width="2" stroke-dasharray="4,3"/><line x1="0" y1="0" x2="0" y2="${st.h}" stroke="#334155" stroke-width="4"/><line x1="0" y1="${st.h}" x2="${st.w}" y2="${st.h}" stroke="#94a3b8" stroke-width="1"/><text x="${st.w / 2}" y="${st.h - 6}" font-size="10" fill="#475569" text-anchor="middle" font-family="sans-serif">${esc(st.label || '門')}</text></g>`);
+      } else if (st.type === 'door-double') {
+        const hw = st.w / 2;
+        parts.push(`<g transform="translate(${st.x}, ${st.y})"><path d="M 0,${st.h} A ${hw} ${st.h} 0 0 1 ${hw},0" fill="none" stroke="#2563a6" stroke-width="1.5" stroke-dasharray="3,3"/><path d="M ${st.w},${st.h} A ${hw} ${st.h} 0 0 0 ${hw},0" fill="none" stroke="#2563a6" stroke-width="1.5" stroke-dasharray="3,3"/><line x1="0" y1="0" x2="0" y2="${st.h}" stroke="#334155" stroke-width="3"/><line x1="${st.w}" y1="0" x2="${st.w}" y2="${st.h}" stroke="#334155" stroke-width="3"/><line x1="0" y1="${st.h}" x2="${st.w}" y2="${st.h}" stroke="#94a3b8" stroke-width="1"/><text x="${hw}" y="${st.h - 6}" font-size="10" fill="#475569" text-anchor="middle" font-family="sans-serif">${esc(st.label || '雙開門')}</text></g>`);
+      } else if (st.type === 'pillar-round') {
+        parts.push(`<circle cx="${st.x + st.w / 2}" cy="${st.y + st.h / 2}" r="${st.w / 2}" fill="#cbd5e1" stroke="#475569" stroke-width="2"/>`);
+      } else {
+        parts.push(`<rect x="${st.x}" y="${st.y}" width="${st.w}" height="${st.h}" fill="#cbd5e1" stroke="#475569" stroke-width="2"/>`);
+      }
+    });
+
+    d.tables.forEach(t => {
+      parts.push(renderTableSvgShape(t));
+      if (t.type === 'auditoriumRow') {
+        const ly = t.y + (t.radius || 250) - 36;
+        parts.push(`<text x="${t.x + t.w / 2}" y="${ly}" text-anchor="middle" font-family="Microsoft JhengHei, sans-serif" font-size="12" font-weight="bold" fill="#475569">${esc(t.name)}</text>`);
+      } else {
+        parts.push(`<text x="${t.x + t.w / 2}" y="${t.y + t.h / 2 + 5}" text-anchor="middle" font-family="Microsoft JhengHei, sans-serif" font-size="14" font-weight="bold" fill="${t.type === 'classroom' ? '#1e293b' : '#6b4423'}">${esc(t.name)}</text>`);
+      }
+
+      const p = positions(t);
+      t.seats.forEach(s => {
+        const q = p[s.id];
+        if (!q) return;
+        const fill = s.role === 'chairman' ? '#fee2e2' : s.role === 'vip' ? '#f3e8ff' : s.role === 'side' ? '#fef3c7' : '#dbeafe';
+        const stroke = s.role === 'chairman' ? '#dc2626' : s.role === 'vip' ? '#7e22ce' : s.role === 'side' ? '#d97706' : '#2563a6';
+        parts.push(`<g transform="translate(${t.x + q.x + 35}, ${t.y + q.y + 18}) rotate(${q.rotation || 0})"><rect x="-35" y="-18" width="70" height="36" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="1.8"/><text x="0" y="-3" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#475569">${esc(s.no)}</text><text x="0" y="11" text-anchor="middle" font-family="Microsoft JhengHei, sans-serif" font-size="11" font-weight="bold" fill="#0f172a">${esc(s.name || '空席')}</text></g>`);
+      });
+    });
+
+    parts.push('</g></svg>');
+    download(new Blob([parts.join('')], { type: 'image/svg+xml' }), safeName() + '_向量圖.svg');
+  };
+
+  // 本機儲存
+  let saveTimer = null;
+  function saveLocal() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try { localStorage.setItem('meetingLayoutV2', JSON.stringify(getProjectData())); } catch (e) {}
+    }, 180);
+  }
+
+  // 縮放控制
+  function applyZoom(val) {
+    zoom = clamp(Math.round(val * 10) / 10, 0.4, 1.8);
+    room.style.transform = `scale(${zoom})`;
+    $('zoomReset').textContent = Math.round(zoom * 100) + '%';
+  }
+  $('zoomIn').onclick = () => applyZoom(zoom + 0.1);
+  $('zoomOut').onclick = () => applyZoom(zoom - 0.1);
+  $('zoomReset').onclick = () => applyZoom(1);
+
+  // 清空與重設
+  $('clearAll').onclick = () => $('confirmModal').classList.add('show');
+  $('cancelClear').onclick = () => $('confirmModal').classList.remove('show');
+  $('confirmClear').onclick = () => {
+    pushHistory();
+    tables = [];
+    structures = [];
+    selectedTable = selectedSeat = selectedStruct = null;
+    $('confirmModal').classList.remove('show');
+    render();
+  };
+
+  $('centerStage').onclick = () => {
+    pushHistory();
+    const rw = +$('roomW').value || 1200;
+    stageConfig.x = Math.round((rw - stageConfig.w) / 2);
+    stageConfig.y = 16;
+    render();
+  };
+
+  // 綁定基礎事件
+  $('addTable').onclick = () => addTable(true);
+  $('updateTable').onclick = updateTable;
+  $('deleteTable').onclick = deleteTable;
+  $('duplicateTable').onclick = duplicateTable;
+  $('applySeat').onclick = applySeat;
+  $('clearSeat').onclick = () => { $('seatName').value = ''; applySeat(); };
+  $('autoArrange').onclick = autoArrange;
+  $('undoBtn').onclick = undo;
+  $('addStruct').onclick = addStruct;
+  $('updateStruct').onclick = updateStruct;
+  $('deleteStruct').onclick = deleteStruct;
+  $('printBtn').onclick = () => window.print();
+
+  // 席位輸入框按 Enter 快速套用
+  ['seatName', 'seatNo'].forEach(id => {
+    $(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter' && selectedSeat) {
+        e.preventDefault();
+        applySeat();
+      }
+    });
+  });
+
+  ['roomW', 'roomH', 'stageText', 'meetingName'].forEach(id => {
+    $(id).addEventListener('input', () => {
+      stageConfig.text = $('stageText').value;
+      render();
+    });
+  });
+
+  // 頁面初始化
+  try {
+    const saved = localStorage.getItem('meetingLayoutV2');
+    if (saved) {
+      loadProjectData(JSON.parse(saved));
+    } else {
+      structures.push({ id: uid(), type: 'door-single', label: '正門入口', x: 20, y: 120, w: 90, h: 90 });
+      structures.push({ id: uid(), type: 'wall-h', label: '後方隔音牆', x: 200, y: 740, w: 800, h: 14 });
+      addTable(false);
+    }
+  } catch (e) {
+    tables = [];
+    structures = [];
+    addTable(false);
+  }
+  updateUndoBtn();
+})();
+</script>
+</body>
+</html>
