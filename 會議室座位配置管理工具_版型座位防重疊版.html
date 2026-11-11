@@ -903,6 +903,9 @@ textarea { min-height: 70px; resize: vertical; }
           ? diameter
           : Math.max(Math.round(diameter * 0.65), Math.ceil((normalCount * 78) / Math.PI) - 56)
       );
+      // 側面加位沿桌高均分，需足夠高度；圓桌同步加寬以維持正圓
+      if (sideRows >= 1) minH = Math.max(minH, (sideRows + 1) * pitchSideY);
+      if (type === 'round') minW = Math.max(minW, minH);
     }
 
     return {
@@ -1033,8 +1036,8 @@ textarea { min-height: 70px; resize: vertical; }
       });
     }
 
-    // 側面加位：若為 U 型或口字型，外側已有一般席位，則排於外二排避免重疊
-    const hasSideNormal = t.type === 'uShape' || t.type === 'hollowSquare';
+    // 側面加位：若為 U 型、口字型或圓桌/橢圓桌，外側已有一般席位，則排於外二排避免重疊
+    const hasSideNormal = ['uShape', 'hollowSquare', 'round', 'oval'].includes(t.type);
     const leftX = hasSideNormal ? -122 : -76;
     const rightX = hasSideNormal ? t.w + 52 : t.w + 6;
     const leftSide = [];
@@ -2351,6 +2354,28 @@ textarea { min-height: 70px; resize: vertical; }
       render();
     });
   });
+
+  // 自我檢查：網址加 ?selftest 執行，驗證「零重疊」承諾 (所有版型 + 各桌型席數掃描)
+  function selfTest() {
+    const fails = [];
+    templateMeta.forEach(m => {
+      const n = detectSeatOverlaps(buildTemplateData(m.key).tables).size;
+      if (n) fails.push(`版型 ${m.key}: ${n} 席重疊`);
+    });
+    ['rect', 'classroom', 'round', 'oval', 'uShape', 'hollowSquare'].forEach(type => {
+      for (let n = 1; n <= 40; n++) {
+        for (let side = 0; side <= 4; side++) {
+          const c = detectSeatOverlaps([seatTable('t', type, 0, 0, n, side)]).size;
+          if (c) fails.push(`${type} n=${n} side=${side}: ${c} 席重疊`);
+        }
+      }
+    });
+    fails.forEach(f => console.error('[selftest]', f));
+    document.title = fails.length ? `SELFTEST FAIL (${fails.length})` : 'SELFTEST PASS';
+    showToast(fails.length ? `自我檢查失敗 ${fails.length} 項：${fails[0]}…（詳見 console）` : '自我檢查通過：零重疊');
+    return fails;
+  }
+  if (location.search.includes('selftest')) window.selfTestResult = selfTest();
 
   // 頁面初始化
   try {
