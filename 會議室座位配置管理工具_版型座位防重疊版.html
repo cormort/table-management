@@ -200,6 +200,7 @@ textarea { min-height: 70px; resize: vertical; }
   z-index: 10;
 }
 .stage.selected { outline: 3px solid #16a34a; }
+.stage, .structObj, .tableObj { touch-action: none; }
 
 /* 結構物件（牆壁、門、立柱） */
 .structObj {
@@ -1349,7 +1350,7 @@ textarea { min-height: 70px; resize: vertical; }
     selectedStruct = null;
     const t = tables.find(x => x.id === id);
     if (t) {
-      $('tableType').value = t.type;
+      if (t.type !== 'auditoriumRow') $('tableType').value = t.type; // 弧形排不在下拉選項中
       $('tableName').value = t.name;
       $('seatCount').value = t.seats.filter(s => s.role !== 'side').length;
       $('sideCount').value = t.seats.filter(s => s.role === 'side').length;
@@ -1420,11 +1421,12 @@ textarea { min-height: 70px; resize: vertical; }
     const t = tables.find(x => x.id === selectedTable);
     if (!t) return alert('請先點選畫布上的桌位！');
     pushHistory();
-    const type = $('tableType').value;
+    const isArc = t.type === 'auditoriumRow'; // 弧形排保留型別與弧寬，避免被改成長方桌
+    const type = isArc ? t.type : $('tableType').value;
     const n = Math.max(1, +$('seatCount').value || 1);
     const side = Math.max(0, +$('sideCount').value || 0);
     const chair = $('chairPos').value;
-    const size = computeTableSize(type, n, side);
+    const size = isArc ? { w: t.w, h: t.h } : computeTableSize(type, n, side);
 
     t.name = $('tableName').value.trim() || t.name;
     t.type = type;
@@ -2228,7 +2230,7 @@ textarea { min-height: 70px; resize: vertical; }
       });
     });
 
-    const csvContent = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const csvContent = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""')}"`).join(',')).join('\r\n');
     download(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), safeName() + '_席次名單.csv');
   };
 
@@ -2348,12 +2350,13 @@ textarea { min-height: 70px; resize: vertical; }
     });
   });
 
-  ['roomW', 'roomH', 'stageText', 'meetingName'].forEach(id => {
+  ['roomW', 'roomH', 'stageText'].forEach(id => {
     $(id).addEventListener('input', () => {
       stageConfig.text = $('stageText').value;
       render();
     });
   });
+  $('meetingName').addEventListener('input', saveLocal); // 標題不影響畫布，免重繪
 
   // 自我檢查：網址加 ?selftest 執行，驗證「零重疊」承諾 (所有版型 + 各桌型席數掃描)
   function selfTest() {
