@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>會議室與展廳座位配置管理工具 (進階版)</title>
+<style>
+/* {{STYLE}} */
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🏢 會議室與展廳座位配置管理工具</h1>
+    <div class="desc">支援常規桌型、教室矩陣、階梯大講堂弧形座位、門牆隔間與名單批次排位</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn amber" id="openTemplateModal">🧩 內建座位版型</button>
+    <button class="btn green" id="openBatchModal">📋 批次名單排位</button>
+    <button class="btn primary" id="openClassroomModal">🏫 教室網格生成</button>
+    <button class="btn purple" id="openAuditoriumModal">🏟️ 大講堂弧形生成</button>
+  </div>
+</header>
+
+<main class="app">
+  <aside class="panel">
+    <!-- 標籤切換 -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tab-table">桌位編輯</button>
+      <button class="tab-btn" data-tab="tab-struct">結構門牆</button>
+      <button class="tab-btn" data-tab="tab-room">場地設定</button>
+      <button class="tab-btn" data-tab="tab-export">匯出與檔案</button>
+    </div>
+
+    <!-- 標籤 1：桌位與席位編輯 -->
+    <div class="tab-content active" id="tab-table">
+      <h2>新增 / 調整桌位</h2>
+      <div class="grid">
+        <div class="field">
+          <label>桌型配置</label>
+          <select id="tableType">
+            <option value="rect">長方桌 (雙側對坐)</option>
+            <option value="classroom">長條桌 (單側朝台)</option>
+            <option value="round">圓桌 (徑向旋轉)</option>
+            <option value="oval">橢圓桌 (徑向旋轉)</option>
+            <option value="uShape">U型桌 (開口向前)</option>
+            <option value="hollowSquare">口字型會議桌</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>桌號 / 名稱</label>
+          <input id="tableName" value="第1桌">
+        </div>
+        <div class="field">
+          <label>主席位 / 席數</label>
+          <input id="seatCount" type="number" min="1" max="40" value="8">
+        </div>
+        <div class="field">
+          <label>側面加位</label>
+          <input id="sideCount" type="number" min="0" max="12" value="0">
+        </div>
+        <div class="field full">
+          <label>主席位置 (首長席)</label>
+          <select id="chairPos">
+            <option value="none">不指定主席位</option>
+            <option value="top">上方中央 (面向觀眾)</option>
+            <option value="bottom">下方中央</option>
+            <option value="left">左側中央</option>
+            <option value="right">右側中央</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="addTable">➕ 新增此桌位</button>
+        <button class="btn green" id="updateTable">💾 更新選取桌位</button>
+        <button class="btn" id="duplicateTable">📄 複製桌位</button>
+        <button class="btn red" id="deleteTable">🗑️ 刪除選取桌位</button>
+      </div>
+
+      <h2>單一席位資料</h2>
+      <div class="grid">
+        <div class="field full">
+          <label>姓名 / 單位</label>
+          <input id="seatName" placeholder="點選畫布席位後直接輸入">
+        </div>
+        <div class="field">
+          <label>席位身份</label>
+          <select id="seatRole">
+            <option value="normal">一般席</option>
+            <option value="chairman">主席 / 首長席</option>
+            <option value="vip">貴賓 / 講員席</option>
+            <option value="side">側面加位</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>席次編號 / 職稱</label>
+          <input id="seatNo" placeholder="如 01, 分機721">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn green" id="applySeat">套用席位</button>
+        <button class="btn" id="clearSeat">清空姓名</button>
+      </div>
+    </div>
+
+    <!-- 標籤 2：場地結構物件（門、牆、柱、講台） -->
+    <div class="tab-content" id="tab-struct">
+      <h2>場地結構物件</h2>
+      <p class="note">在畫布上擺放隔間牆、進出門與立柱，標示場地真實動線。</p>
+      <div class="grid">
+        <div class="field">
+          <label>結構類別</label>
+          <select id="structType">
+            <option value="wall-h">水平隔間牆 (橫)</option>
+            <option value="wall-v">垂直隔間牆 (直)</option>
+            <option value="door-single">單開門 (含開向軌跡)</option>
+            <option value="door-double">雙開門 (雙向對開)</option>
+            <option value="pillar-round">圓形結構柱</option>
+            <option value="pillar-square">方形結構柱</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>標籤 / 備註</label>
+          <input id="structLabel" value="後方大門">
+        </div>
+        <div class="field">
+          <label>長度 / 寬度 (px)</label>
+          <input id="structW" type="number" value="120">
+        </div>
+        <div class="field">
+          <label>高度 / 厚度 (px)</label>
+          <input id="structH" type="number" value="14">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="addStruct">➕ 擺放結構物</button>
+        <button class="btn green" id="updateStruct">💾 更新結構物</button>
+        <button class="btn red" id="deleteStruct">🗑️ 刪除結構物</button>
+      </div>
+      
+      <h2>預設結構快速置入</h2>
+      <div class="actions">
+        <button class="btn" id="quickAddDoorLeft">🚪 增設左側進出門</button>
+        <button class="btn" id="quickAddDoorRight">🚪 增設右側進出門</button>
+      </div>
+    </div>
+
+    <!-- 標籤 3：會議室與講台基本設定 -->
+    <div class="tab-content" id="tab-room">
+      <h2>會議室整體尺寸</h2>
+      <div class="grid">
+        <div class="field full">
+          <label>會議 / 活動主題</label>
+          <input id="meetingName" value="2026 年度策略規劃會議座位配置表">
+        </div>
+        <div class="field">
+          <label>場地寬度 (px)</label>
+          <input id="roomW" type="number" min="800" max="3000" step="50" value="1200">
+        </div>
+        <div class="field">
+          <label>場地高度 (px)</label>
+          <input id="roomH" type="number" min="600" max="2500" step="50" value="800">
+        </div>
+        <div class="field full">
+          <label>講台 / 舞台標題</label>
+          <input id="stageText" value="講台區 / 主席台 (Stage)">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="centerStage">講台置中</button>
+        <button class="btn red" id="clearAll">清空全部畫布</button>
+      </div>
+    </div>
+
+    <!-- 標籤 4：檔案匯出與備份 -->
+    <div class="tab-content" id="tab-export">
+      <h2>檔案匯出與備份</h2>
+      <div class="actions">
+        <button class="btn green" id="exportJson">📦 匯出配置 JSON</button>
+        <button class="btn" id="importJson">📥 匯入配置 JSON</button>
+        <button class="btn green" id="exportSvg">🎨 匯出向量 SVG</button>
+        <button class="btn purple" id="exportCsv">📊 匯出席次 CSV (Excel)</button>
+        <button class="btn primary" id="printBtn">🖨️ 列印 / 另存 PDF</button>
+      </div>
+      <input id="jsonFile" type="file" accept="application/json,.json" hidden>
+      <p class="note">
+        • <b>SVG 向量檔</b>：保留精準旋轉角度與門牆結構，可直接置入 PowerPoint 或 Illustrator。<br>
+        • <b>CSV 席次清冊</b>：帶有 UTF-8 BOM，微軟 Excel 開啟繁體中文絕不亂碼。<br>
+        • <b>JSON 備份檔</b>：保存完整座標、結構與姓名，方便隨時復原續編。
+      </p>
+    </div>
+  </aside>
+
+  <!-- 工作畫布區 -->
+  <section class="workspace">
+    <div class="toolbar">
+      <button class="btn" id="zoomOut">🔍 縮小</button>
+      <button class="btn" id="zoomReset">100%</button>
+      <button class="btn" id="zoomIn">放大</button>
+      <button class="btn" id="autoArrange">📐 桌位防重疊排列</button>
+      <button class="btn" id="undoBtn" disabled title="復原上一步 (Ctrl+Z)">↩️ 復原</button>
+      <button class="btn" id="redoBtn" disabled title="重做 (Ctrl+Y / Cmd+Shift+Z)">↪️ 重做</button>
+      <span class="status" id="status">桌數: 0｜席位: 0</span>
+    </div>
+
+    <div id="roomWrap">
+      <div id="room">
+        <!-- 講台 -->
+        <div class="stage" id="stage">講台區 / 主席台 (Stage)</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot normalDot"></i>一般席</span>
+      <span><i class="dot chairDot"></i>主席席</span>
+      <span><i class="dot vipDot"></i>貴賓/講員席</span>
+      <span><i class="dot sideDot"></i>側面加位</span>
+      <span style="margin-left:auto; color:#64748b;">💡 提示：點擊席位直接輸入姓名；拖曳桌位或門牆移動；支援圓桌/階梯弧形徑向角度。</span>
+    </div>
+  </section>
+</main>
+
+
+<!-- Modal 0: 內建座位版型 -->
+<div class="modal" id="templateModal">
+  <div class="dialog" style="width:min(1080px,97vw)">
+    <h3>🧩 內建座位版型庫</h3>
+    <p class="note">先選擇版型查看平面預覽、席位數與適用情境，再按「套用此版型」。套用會取代目前畫布，但可按 Ctrl+Z 復原。</p>
+    <div class="template-toolbar">
+      <input id="templateSearch" placeholder="搜尋版型，例如：首長、教室、談判、考試">
+      <select id="templateSort" style="width:160px"><option value="default">建議排序</option><option value="seatsAsc">席位少至多</option><option value="seatsDesc">席位多至少</option></select>
+    </div>
+    <div class="template-filters" id="templateFilters">
+      <button class="template-filter active" data-category="all">全部</button>
+      <button class="template-filter" data-category="meeting">會議決策</button>
+      <button class="template-filter" data-category="training">教學訓練</button>
+      <button class="template-filter" data-category="event">簡報活動</button>
+      <button class="template-filter" data-category="special">特殊用途</button>
+    </div>
+    <div class="template-layout">
+      <div class="template-grid" id="templateGrid"></div>
+      <aside class="template-preview">
+        <h4 id="previewTitle">請選擇版型</h4>
+        <div class="preview-canvas" id="previewCanvas"></div>
+        <div class="preview-desc" id="previewDesc">點選左側版型即可查看配置示意。</div>
+        <div class="preview-stats">
+          <div class="preview-stat"><b id="previewSeats">-</b><small>席位</small></div>
+          <div class="preview-stat"><b id="previewTables">-</b><small>桌區</small></div>
+          <div class="preview-stat"><b id="previewSize">-</b><small>場地尺寸</small></div>
+        </div>
+        <button class="btn primary" id="applySelectedTemplate" disabled>套用此版型</button>
+      </aside>
+    </div>
+    <div class="dialog-footer"><button class="btn" id="closeTemplateModal">取消</button></div>
+  </div>
+</div>
+
+<!-- Modal 1: 教室行與列快速生成器 -->
+<div class="modal" id="classroomModal">
+  <div class="dialog">
+    <h3>🏫 教室網格座位快速生成器</h3>
+    <p class="note">依輸入的行數與列數，自動整齊排列長條課堂桌，支援名單一鍵順序分配。</p>
+    <div class="grid">
+      <div class="field">
+        <label>行數 (列數 Rows)</label>
+        <input id="crRows" type="number" min="1" max="15" value="4">
+      </div>
+      <div class="field">
+        <label>列數 (欄數 Columns)</label>
+        <input id="crCols" type="number" min="1" max="10" value="3">
+      </div>
+      <div class="field">
+        <label>每桌人數</label>
+        <select id="crSeatsPerTable">
+          <option value="1">單人單桌 (Individual Desk)</option>
+          <option value="2" selected>雙人並排 (2人課堂桌)</option>
+          <option value="3">三人長桌 (3人長桌)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>走道模式</label>
+        <select id="crAisle">
+          <option value="none">連續無中空走道</option>
+          <option value="center" selected>中央走道 (左右分區)</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>批次名單貼上 (每行一人，依序自動填入)</label>
+        <textarea id="crNames" placeholder="張小明&#10;李大華&#10;王美麗&#10;陳建宏..."></textarea>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" id="closeClassroomModal">取消</button>
+      <button class="btn primary" id="generateClassroom">立即生成教室矩陣</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 2: 階梯大講堂弧形座位生成器 -->
+<div class="modal" id="auditoriumModal">
+  <div class="dialog">
+    <h3>🏟️ 大講堂階梯弧形座位生成器</h3>
+    <p class="note">產生如大禮堂、音樂廳或扇形國際會議廳之階梯同心圓弧座位，席位法線自動朝向講台圓心。</p>
+    <div class="grid">
+      <div class="field">
+        <label>總排數 (Tiers / Rows)</label>
+        <input id="audRows" type="number" min="1" max="12" value="4">
+      </div>
+      <div class="field">
+        <label>第一排席位數</label>
+        <input id="audStartSeats" type="number" min="4" max="24" value="8">
+      </div>
+      <div class="field">
+        <label>每排遞增席數</label>
+        <input id="audSeatStep" type="number" min="0" max="6" value="2">
+      </div>
+      <div class="field">
+        <label>弧形展開角度 (°)</label>
+        <input id="audAngleSpan" type="number" min="40" max="160" value="90">
+      </div>
+      <div class="field">
+        <label>首排曲率半徑 (px)</label>
+        <input id="audStartRadius" type="number" min="150" max="600" value="230">
+      </div>
+      <div class="field">
+        <label>排距間隔 (px)</label>
+        <input id="audRowSpacing" type="number" min="50" max="120" value="70">
+      </div>
+      <div class="field full">
+        <label>大講堂學員 / 與會名單 (依序排入席位)</label>
+        <textarea id="audNames" placeholder="貼上姓名名單，將依第1排、第2排...順序填入"></textarea>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" id="closeAuditoriumModal">取消</button>
+      <button class="btn purple" id="generateAuditorium">立即生成弧形講堂</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 3: 批次名單排位 -->
+<div class="modal" id="batchModal">
+  <div class="dialog">
+    <h3>📋 批次名單填入與指派</h3>
+    <p class="note">將與會名單一次性批量填入當前選取的桌位，或是全場所有座位。</p>
+    <div class="field full">
+      <label>人員名單 (支援換行、逗號、空格分隔)</label>
+      <textarea id="batchNameList" style="min-height: 140px;" placeholder="王大明&#10;李小華&#10;陳正忠&#10;林美秀..."></textarea>
+    </div>
+    <div class="actions">
+      <button class="btn green" id="batchToSelectedTable">填入目前選取的桌位</button>
+      <button class="btn primary" id="batchToAllTables">依序填入全場所有席位</button>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" id="closeBatchModal">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 4: 確認清空 -->
+<div class="modal" id="confirmModal">
+  <div class="dialog">
+    <h3>⚠️ 確認清空全場配置</h3>
+    <p>這會清除所有桌位、席位以及門牆結構（清除後仍可按 Ctrl+Z 或「復原」還原）。</p>
+    <div class="dialog-footer">
+      <button class="btn" id="cancelClear">取消</button>
+      <button class="btn red" id="confirmClear">確定全部清空</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* {{SCRIPT}} */
+</script>
+</body>
+</html>
