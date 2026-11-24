@@ -851,6 +851,7 @@ $('quickAddDoorRight').onclick = () => {
 
 // 內建座位版型 UI 控制
 let selectedTemplateKey = null;
+let pendingTemplateKey = null;
 let templateCategory = 'all';
 
 function renderTemplateLibrary() {
@@ -903,7 +904,28 @@ $('openTemplateModal').onclick = () => {
   if (!selectedTemplateKey) selectTemplate('executive');
 };
 $('closeTemplateModal').onclick = () => $('templateModal').classList.remove('show');
-$('applySelectedTemplate').onclick = () => selectedTemplateKey && applyTemplate(selectedTemplateKey);
+$('applySelectedTemplate').onclick = () => {
+  if (!selectedTemplateKey) return;
+  if (tables.length > 0 || structures.length > 0) {
+    pendingTemplateKey = selectedTemplateKey;
+    const t = templateCatalog.find(x => x.key === selectedTemplateKey);
+    const label = t ? `「${t.name}」` : '此版型';
+    $('confirmTemplateMsg').textContent = `套用${label}將會清除目前的會議室配置（包含所有桌位、已排定名單與門牆結構）。套用後仍可按 Ctrl+Z 或點擊「復原」還原。`;
+    $('confirmTemplateModal').classList.add('show');
+  } else {
+    applyTemplate(selectedTemplateKey);
+  }
+};
+$('cancelApplyTemplate').onclick = () => {
+  pendingTemplateKey = null;
+  $('confirmTemplateModal').classList.remove('show');
+};
+$('confirmApplyTemplate').onclick = () => {
+  const key = pendingTemplateKey;
+  pendingTemplateKey = null;
+  $('confirmTemplateModal').classList.remove('show');
+  if (key) applyTemplate(key);
+};
 $('templateSearch').oninput = renderTemplateLibrary;
 $('templateSort').onchange = renderTemplateLibrary;
 document.querySelectorAll('.template-filter').forEach(b => {
@@ -920,6 +942,11 @@ window.addEventListener('keydown', e => {
   const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
   if (e.key === 'Escape') {
+    if ($('confirmTemplateModal').classList.contains('show')) {
+      pendingTemplateKey = null;
+      $('confirmTemplateModal').classList.remove('show');
+      return;
+    }
     document.querySelectorAll('.modal.show').forEach(m => m.classList.remove('show'));
     return;
   }
