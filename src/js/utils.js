@@ -23,3 +23,24 @@ export function parseNames(raw) {
 export function safeFileName(meetingName) {
   return (String(meetingName || '').trim() || '會議座位表').replace(/[\/:*?"<>|]/g, '_');
 }
+
+export function findDuplicateNames(tableList) {
+  const nameToIds = new Map();
+  (tableList || []).forEach(t => {
+    (t.seats || []).forEach(s => {
+      const n = String(s.name || '').trim();
+      if (!n) return;
+      if (!nameToIds.has(n)) nameToIds.set(n, []);
+      nameToIds.get(n).push(s.id);
+    });
+  });
+  const seatIds = new Set();
+  const names = [];
+  for (const [name, ids] of nameToIds.entries()) {
+    if (ids.length > 1) {
+      names.push(name);
+      ids.forEach(id => seatIds.add(id));
+    }
+  }
+  return { seatIds, names };
+}

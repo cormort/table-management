@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  findDuplicateNames
+} from '../src/js/utils.js';
+import {
   makeSeats,
   positions,
   detectSeatOverlaps
@@ -113,4 +116,26 @@ test('buildProjectSvg renders header title, uShape path, hollowSquare frame, and
   assert.ok(svg.includes('<path d="M ')); // uShape path
   assert.ok(svg.includes('fill="none" stroke="#8b5e34"')); // hollowSquare/uShape stroke
   assert.ok(svg.includes('rotate('));
+});
+
+test('findDuplicateNames identifies duplicate attendee names across tables', () => {
+  const dup = findDuplicateNames([
+    { seats: [{ id: 's1', name: '王小明' }, { id: 's2', name: '' }, { id: 's3', name: '李大華' }] },
+    { seats: [{ id: 's4', name: '王小明' }, { id: 's5', name: '陳建宏' }] }
+  ]);
+  assert.deepEqual(dup.names, ['王小明']);
+  assert.equal(dup.seatIds.has('s1'), true);
+  assert.equal(dup.seatIds.has('s4'), true);
+  assert.equal(dup.seatIds.has('s3'), false);
+});
+
+test('rotated tables preserve rotation in sanitizeProjectData, SVG export, and SAT overlap check', () => {
+  const t = seatTable('旋轉桌', 'rect', 200, 200, 8, 0, 'top', { rotation: 90 });
+  assert.equal(detectSeatOverlaps([t]).size, 0);
+
+  const sanitized = sanitizeProjectData({ tables: [{ ...t, rotation: 450 }] });
+  assert.equal(sanitized.tables[0].rotation, 90);
+
+  const svg = buildProjectSvg(sanitized);
+  assert.ok(svg.includes(`rotate(90, ${t.x + t.w / 2}, ${t.y + t.h / 2})`));
 });

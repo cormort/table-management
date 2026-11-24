@@ -1,4 +1,4 @@
-import { esc, uid, clamp, parseNames, safeFileName } from './utils.js';
+import { esc, uid, clamp, parseNames, safeFileName, findDuplicateNames } from './utils.js';
 import {
   computeTableSize,
   makeSeats,
@@ -17,7 +17,8 @@ import {
   sanitizeProjectData,
   buildCsvContent,
   buildPreviewSvg,
-  buildProjectSvg
+  buildProjectSvg,
+  svgToPngBlob
 } from './exporter.js';
 
 const $ = id => document.getElementById(id);
@@ -31,10 +32,15 @@ let structures = [];
 let stageConfig = { x: 420, y: 16, w: 360, h: 52, text: '講台區 / 主席台 (Stage)' };
 
 let selectedTable = null;
+const selectedTables = new Set();
 let selectedSeat = null;
 let selectedStruct = null;
 let zoom = 1;
+let snapToGrid = false;
+let layoutLocked = false;
 let drag = null;
+let marquee = null;
+let dragSeatInfo = null;
 let toastTimer = null;
 const undoStack = [];
 const redoStack = [];
@@ -93,10 +99,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 function refreshOverlapMarkers() {
   const overlaps = detectSeatOverlaps(tables);
+  const dup = findDuplicateNames(tables);
   room.querySelectorAll('.seat').forEach(se => {
     se.classList.toggle('overlap', overlaps.has(se.dataset.seat));
+    se.classList.toggle('duplicate', dup.seatIds.has(se.dataset.seat));
   });
-  updateStatus(overlaps.size);
+  updateStatus(overlaps.size, dup.names.length);
 }
 
 // 僅更新選取樣式，不重建 DOM (確保拖曳穩定)
@@ -106,11 +114,27 @@ function syncSelectionUI() {
     el.classList.toggle('selected', el.dataset.id === selectedStruct);
   });
   room.querySelectorAll('.tableObj').forEach(el => {
-    el.classList.toggle('selected', el.dataset.id === selectedTable);
+    const id = el.dataset.id;
+    el.classList.toggle('selected', id === selectedTable || selectedTables.has(id));
   });
   room.querySelectorAll('.seat').forEach(el => {
     el.classList.toggle('selected', el.dataset.seat === selectedSeat);
   });
+}
+
+function applySearchHighlight(scrollFirst = false) {
+  const q = ($('seatSearch')?.value || '').trim().toLowerCase();
+  let firstMatch = null;
+  room.querySelectorAll('.seat').forEach(se => {
+    const nameEl = se.querySelector('.name');
+    const txt = (nameEl?.textContent || '').trim();
+    const isMatch = Boolean(q && txt && txt !== '空席' && txt.toLowerCase().includes(q));
+    se.classList.toggle('match', isMatch);
+    if (isMatch && !firstMatch) firstMatch = se;
+  });
+  if (scrollFirst && firstMatch) {
+    firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }
 }
 
 function structSvgMarkup(st) {
@@ -144,9 +168,59 @@ function structSvgMarkup(st) {
   return `<div class="structPillar" style="width:100%;height:100%;"></div>`;
 }
 
+function swapSeats(tid1, sid1, tid2, sid2) {
+  if (sid1 === sid2) return;
+  const t1 = tables.find(x => x.id === tid1);
+  const t2 = tables.find(x => x.id === tid2);
+  const s1 = t1?.seats.find(x => x.id === sid1);
+  const s2 = t2?.seats.find(x => x.id === sid2);
+  if (!s1 || !s2) return;
+  pushHistory();
+  const tmpName = s1.name;
+  s1.name = s2.name;
+  s2.name = tmpName;
+  render();
+  showToast('已對調席位姓名。');
+}
+
+function openInlineSeatEditor(se, tid, sid) {
+  const t = tables.find(x => x.id === tid);
+  const s = t?.seats.find(x => x.id === sid);
+  if (!s) return;
+  const inp = document.createElement('input');
+  inp.className = 'seat-inline-input';
+  inp.value = s.name || '';
+  inp.placeholder = '姓名';
+  se.innerHTML = '';
+  se.appendChild(inp);
+  inp.focus();
+  inp.select();
+
+  let done = false;
+  const commit = save => {
+    if (done) return;
+    done = true;
+    const nextVal = inp.value.trim();
+    if (save && nextVal !== (s.name || '')) {
+      pushHistory();
+      s.name = nextVal;
+      if (selectedSeat === sid) $('seatName').value = nextVal;
+    }
+    render();
+  };
+  inp.onclick = e => e.stopPropagation();
+  inp.onpointerdown = e => e.stopPropagation();
+  inp.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit(true);
+    else if (e.key === 'Escape') commit(false);
+  };
+  inp.onblur = () => commit(true);
+}
+
 // 繪製與渲染畫布
 function render() {
-  room.querySelectorAll('.tableObj, .structObj').forEach(el => el.remove());
+  room.querySelectorAll('.tableObj, .structObj, .align-guide, .marquee-box').forEach(el => el.remove());
 
   const rw = clamp(+$('roomW').value || 1200, 600, 3600);
   const rh = clamp(+$('roomH').value || 800, 500, 3000);
@@ -177,6 +251,7 @@ function render() {
   });
 
   const overlaps = detectSeatOverlaps(tables);
+  const dup = findDuplicateNames(tables);
 
   // 渲染桌位與席位
   tables.forEach(t => {
@@ -187,7 +262,8 @@ function render() {
       left: t.x + 'px',
       top: t.y + 'px',
       width: t.w + 'px',
-      height: t.h + 'px'
+      height: t.h + 'px',
+      transform: t.rotation ? `rotate(${t.rotation}deg)` : ''
     });
 
     const sh = document.createElement('div');
@@ -206,18 +282,54 @@ function render() {
       const q = p[s.id];
       if (!q) return;
       const se = document.createElement('div');
-      se.className = `seat ${s.role}` + (overlaps.has(s.id) ? ' overlap' : '');
+      se.className = `seat ${s.role}`
+        + (overlaps.has(s.id) ? ' overlap' : '')
+        + (dup.seatIds.has(s.id) ? ' duplicate' : '');
       se.dataset.seat = s.id;
+      se.draggable = true;
       se.style.left = q.x + 'px';
       se.style.top = q.y + 'px';
       se.style.transform = `rotate(${q.rotation || 0}deg)`;
       se.innerHTML = `<span class="no">${esc(s.no)}</span><span class="name">${esc(s.name || '空席')}</span>`;
-      se.title = `${t.name}｜${s.no}號席${s.name ? '：' + s.name : ''}`;
+      se.title = `${t.name}｜${s.no}號席${s.name ? '：' + s.name : ''}（雙擊快編／拖曳對調）`;
+
       se.onpointerdown = e => e.stopPropagation();
       se.onclick = e => {
         e.stopPropagation();
         selectSeat(t.id, s.id);
       };
+      se.ondblclick = e => {
+        e.stopPropagation();
+        openInlineSeatEditor(se, t.id, s.id);
+      };
+      se.ondragstart = e => {
+        e.stopPropagation();
+        dragSeatInfo = { tid: t.id, sid: s.id };
+        se.classList.add('dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', s.id);
+        }
+      };
+      se.ondragover = e => {
+        if (!dragSeatInfo || dragSeatInfo.sid === s.id) return;
+        e.preventDefault();
+        se.classList.add('drop-target');
+      };
+      se.ondragleave = () => se.classList.remove('drop-target');
+      se.ondrop = e => {
+        e.preventDefault();
+        e.stopPropagation();
+        se.classList.remove('drop-target');
+        if (dragSeatInfo) swapSeats(dragSeatInfo.tid, dragSeatInfo.sid, t.id, s.id);
+        dragSeatInfo = null;
+      };
+      se.ondragend = () => {
+        se.classList.remove('dragging');
+        room.querySelectorAll('.seat.drop-target').forEach(node => node.classList.remove('drop-target'));
+        dragSeatInfo = null;
+      };
+
       el.appendChild(se);
     });
 
@@ -226,35 +338,91 @@ function render() {
   });
 
   syncSelectionUI();
-  updateStatus(overlaps.size);
+  applySearchHighlight(false);
+  updateStatus(overlaps.size, dup.names.length);
   saveLocal();
 }
 
-// 高效拖曳處理 (不重建 DOM，避免 pointerCapture 失效)
+function clearAlignGuides() {
+  room.querySelectorAll('.align-guide').forEach(g => g.remove());
+}
+
+function showAlignGuides(vx, hy) {
+  clearAlignGuides();
+  if (vx !== null) {
+    const g = document.createElement('div');
+    g.className = 'align-guide v';
+    g.style.left = vx + 'px';
+    room.appendChild(g);
+  }
+  if (hy !== null) {
+    const g = document.createElement('div');
+    g.className = 'align-guide h';
+    g.style.top = hy + 'px';
+    room.appendChild(g);
+  }
+}
+
+// 高效拖曳處理 (支援鎖定、多選群組拖曳、網格吸附與對齊輔助線)
 function startDrag(e, id, kind) {
   if (e.button !== 0) return;
   if (e.target.closest('.seat')) return;
   e.stopPropagation();
+
+  if (kind === 'table' && e.shiftKey) {
+    if (selectedTables.has(id)) {
+      selectedTables.delete(id);
+      if (selectedTable === id) selectedTable = [...selectedTables][0] || null;
+    } else {
+      selectedTables.add(id);
+      selectedTable = id;
+    }
+    selectedSeat = null;
+    selectedStruct = null;
+    syncSelectionUI();
+    return;
+  }
+
   const targetEl = e.currentTarget;
   let obj;
+  let group = null;
+
   if (kind === 'table') {
-    selectTable(id, true);
-    obj = tables.find(x => x.id === id);
+    if (selectedTables.has(id) && selectedTables.size > 1) {
+      selectedTable = id;
+      selectedSeat = null;
+      selectedStruct = null;
+      syncSelectionUI();
+      obj = tables.find(x => x.id === id);
+      if (!layoutLocked) {
+        group = [...selectedTables].map(tid => {
+          const item = tables.find(x => x.id === tid);
+          const itemEl = room.querySelector(`.tableObj[data-id="${tid}"]`);
+          return item && itemEl ? { obj: item, el: itemEl, ox: item.x, oy: item.y } : null;
+        }).filter(Boolean);
+      }
+    } else {
+      selectTable(id, true);
+      obj = tables.find(x => x.id === id);
+    }
   } else if (kind === 'struct') {
     selectStruct(id, true);
     obj = structures.find(x => x.id === id);
   } else if (kind === 'stage') {
     selectedStruct = 'stage';
     selectedTable = selectedSeat = null;
+    selectedTables.clear();
     syncSelectionUI();
     obj = stageConfig;
   }
-  if (!obj) return;
+
+  if (!obj || layoutLocked) return;
 
   drag = {
     kind,
     obj,
     el: targetEl,
+    group,
     sx: e.clientX,
     sy: e.clientY,
     ox: obj.x,
@@ -266,21 +434,49 @@ function startDrag(e, id, kind) {
 
 stageEl.onpointerdown = e => startDrag(e, 'stage', 'stage');
 
-// 點擊空白畫布取消選取
+// 點擊空白畫布取消選取或開始框選多桌
 room.addEventListener('pointerdown', e => {
-  if (e.target === room) {
-    selectedTable = selectedSeat = selectedStruct = null;
-    syncSelectionUI();
-  }
+  if (e.target !== room || e.button !== 0) return;
+  selectedTable = selectedSeat = selectedStruct = null;
+  selectedTables.clear();
+  syncSelectionUI();
+
+  const rect = room.getBoundingClientRect();
+  const startX = (e.clientX - rect.left) / zoom;
+  const startY = (e.clientY - rect.top) / zoom;
+  const boxEl = document.createElement('div');
+  boxEl.className = 'marquee-box';
+  room.appendChild(boxEl);
+  marquee = { startX, startY, curX: startX, curY: startY, boxEl, moved: false };
 });
+
 roomWrap.addEventListener('pointerdown', e => {
   if (e.target === roomWrap) {
     selectedTable = selectedSeat = selectedStruct = null;
+    selectedTables.clear();
     syncSelectionUI();
   }
 });
 
 window.addEventListener('pointermove', e => {
+  if (marquee) {
+    const rect = room.getBoundingClientRect();
+    marquee.curX = (e.clientX - rect.left) / zoom;
+    marquee.curY = (e.clientY - rect.top) / zoom;
+    const x = Math.min(marquee.startX, marquee.curX);
+    const y = Math.min(marquee.startY, marquee.curY);
+    const w = Math.abs(marquee.curX - marquee.startX);
+    const h = Math.abs(marquee.curY - marquee.startY);
+    if (w > 4 || h > 4) marquee.moved = true;
+    Object.assign(marquee.boxEl.style, {
+      left: x + 'px',
+      top: y + 'px',
+      width: w + 'px',
+      height: h + 'px'
+    });
+    return;
+  }
+
   if (!drag) return;
   const dx = (e.clientX - drag.sx) / zoom;
   const dy = (e.clientY - drag.sy) / zoom;
@@ -288,21 +484,111 @@ window.addEventListener('pointermove', e => {
     pushHistory();
     drag.moved = true;
   }
+
   const rw = +$('roomW').value || 1200;
   const rh = +$('roomH').value || 800;
+
+  if (drag.group && drag.group.length > 1) {
+    let gdx = Math.round(dx);
+    let gdy = Math.round(dy);
+    if (snapToGrid) {
+      gdx = Math.round((drag.ox + dx) / 10) * 10 - drag.ox;
+      gdy = Math.round((drag.oy + dy) / 10) * 10 - drag.oy;
+    }
+    drag.group.forEach(item => {
+      const mx = Math.max(0, rw - (item.obj.w || 0));
+      const my = Math.max(0, rh - (item.obj.h || 0));
+      item.curX = clamp(item.ox + gdx, 0, mx);
+      item.curY = clamp(item.oy + gdy, 0, my);
+      item.el.style.left = item.curX + 'px';
+      item.el.style.top = item.curY + 'px';
+    });
+    return;
+  }
+
   const maxX = Math.max(0, rw - (drag.obj.w || 0));
   const maxY = Math.max(0, rh - (drag.obj.h || 0));
-  drag.curX = clamp(Math.round(drag.ox + dx), 0, maxX);
-  drag.curY = clamp(Math.round(drag.oy + dy), 0, maxY);
+  let nx = Math.round(drag.ox + dx);
+  let ny = Math.round(drag.oy + dy);
+  if (snapToGrid) {
+    nx = Math.round(nx / 10) * 10;
+    ny = Math.round(ny / 10) * 10;
+  }
+
+  // 與其他桌位或講台邊緣／中心對齊輔助線
+  let guideX = null;
+  let guideY = null;
+  const w = drag.obj.w || 0;
+  const h = drag.obj.h || 0;
+  const targets = [stageConfig, ...tables.filter(t => t !== drag.obj)];
+  for (const other of targets) {
+    const ow = other.w || 0;
+    const oh = other.h || 0;
+    if (guideX === null) {
+      if (Math.abs(nx - other.x) <= 6) { nx = other.x; guideX = other.x; }
+      else if (Math.abs((nx + w / 2) - (other.x + ow / 2)) <= 6) {
+        nx = Math.round(other.x + ow / 2 - w / 2);
+        guideX = Math.round(other.x + ow / 2);
+      } else if (Math.abs((nx + w) - (other.x + ow)) <= 6) {
+        nx = Math.round(other.x + ow - w);
+        guideX = Math.round(other.x + ow);
+      }
+    }
+    if (guideY === null) {
+      if (Math.abs(ny - other.y) <= 6) { ny = other.y; guideY = other.y; }
+      else if (Math.abs((ny + h / 2) - (other.y + oh / 2)) <= 6) {
+        ny = Math.round(other.y + oh / 2 - h / 2);
+        guideY = Math.round(other.y + oh / 2);
+      } else if (Math.abs((ny + h) - (other.y + oh)) <= 6) {
+        ny = Math.round(other.y + oh - h);
+        guideY = Math.round(other.y + oh);
+      }
+    }
+    if (guideX !== null && guideY !== null) break;
+  }
+  showAlignGuides(guideX, guideY);
+
+  drag.curX = clamp(nx, 0, maxX);
+  drag.curY = clamp(ny, 0, maxY);
   drag.el.style.left = drag.curX + 'px';
   drag.el.style.top = drag.curY + 'px';
 });
 
 function finishDrag() {
+  if (marquee) {
+    const x1 = Math.min(marquee.startX, marquee.curX);
+    const y1 = Math.min(marquee.startY, marquee.curY);
+    const x2 = Math.max(marquee.startX, marquee.curX);
+    const y2 = Math.max(marquee.startY, marquee.curY);
+    marquee.boxEl.remove();
+    if (marquee.moved) {
+      selectedTables.clear();
+      tables.forEach(t => {
+        if (t.x < x2 && t.x + t.w > x1 && t.y < y2 && t.y + t.h > y1) {
+          selectedTables.add(t.id);
+        }
+      });
+      selectedTable = [...selectedTables][0] || null;
+      if (selectedTable) selectTable(selectedTable, true);
+      else syncSelectionUI();
+    }
+    marquee = null;
+  }
+
   if (!drag) return;
-  if (drag.curX !== undefined && drag.moved) {
-    drag.obj.x = drag.curX;
-    drag.obj.y = drag.curY;
+  clearAlignGuides();
+  if (drag.moved) {
+    if (drag.group && drag.group.length > 1) {
+      drag.group.forEach(item => {
+        if (item.curX !== undefined) {
+          item.obj.x = item.curX;
+          item.obj.y = item.curY;
+        }
+      });
+    } else if (drag.curX !== undefined) {
+      drag.obj.x = drag.curX;
+      drag.obj.y = drag.curY;
+    }
     refreshOverlapMarkers();
     saveLocal();
   }
@@ -315,15 +601,19 @@ window.addEventListener('pointercancel', finishDrag);
 // 選取切換
 function selectTable(id, skipRender = false) {
   selectedTable = id;
+  selectedTables.clear();
+  if (id) selectedTables.add(id);
   selectedSeat = null;
   selectedStruct = null;
   const t = tables.find(x => x.id === id);
   if (t) {
-    if (t.type !== 'auditoriumRow') $('tableType').value = t.type; // 弧形排不在下拉選項中
+    if (t.type !== 'auditoriumRow') $('tableType').value = t.type;
     $('tableName').value = t.name;
     $('seatCount').value = t.seats.filter(s => s.role !== 'side').length;
     $('sideCount').value = t.seats.filter(s => s.role === 'side').length;
     $('chairPos').value = t.chair || 'none';
+    $('tableRotation').value = t.rotation || 0;
+    switchTab('tab-table');
   }
   if (skipRender) syncSelectionUI();
   else render();
@@ -331,6 +621,8 @@ function selectTable(id, skipRender = false) {
 
 function selectSeat(tid, sid) {
   selectedTable = tid;
+  selectedTables.clear();
+  selectedTables.add(tid);
   selectedSeat = sid;
   selectedStruct = null;
   const t = tables.find(x => x.id === tid);
@@ -340,7 +632,7 @@ function selectSeat(tid, sid) {
     $('seatRole').value = s.role;
     $('seatNo').value = s.no;
   }
-  switchTab('tab-table');
+  switchTab('tab-seat');
   syncSelectionUI();
   $('seatName').focus();
   $('seatName').select();
@@ -349,25 +641,27 @@ function selectSeat(tid, sid) {
 function selectStruct(id, skipRender = false) {
   selectedStruct = id;
   selectedTable = selectedSeat = null;
+  selectedTables.clear();
   const st = structures.find(x => x.id === id);
   if (st) {
     $('structType').value = st.type;
     $('structLabel').value = st.label || '';
     $('structW').value = st.w;
     $('structH').value = st.h;
-    switchTab('tab-struct');
+    switchTab('tab-room');
   }
   if (skipRender) syncSelectionUI();
   else render();
 }
 
-// 桌位新增 / 更新 / 刪除
+// 桌位新增 / 更新 / 刪除 / 旋轉
 function addTable(recordHistory = true) {
   if (recordHistory) pushHistory();
   const type = $('tableType').value;
   const n = Math.max(1, +$('seatCount').value || 1);
   const side = Math.max(0, +$('sideCount').value || 0);
   const chair = $('chairPos').value;
+  const rotation = ((+$('tableRotation').value || 0) % 360 + 360) % 360;
   const size = computeTableSize(type, n, side);
 
   const newT = {
@@ -378,6 +672,7 @@ function addTable(recordHistory = true) {
     y: 120 + Math.floor(tables.length / 3) * 280,
     w: size.w,
     h: size.h,
+    rotation,
     chair,
     seats: makeSeats(n, side, chair, type)
   };
@@ -390,20 +685,21 @@ function updateTable() {
   const t = tables.find(x => x.id === selectedTable);
   if (!t) return alert('請先點選畫布上的桌位！');
   pushHistory();
-  const isArc = t.type === 'auditoriumRow'; // 弧形排保留型別與弧寬，避免被改成長方桌
+  const isArc = t.type === 'auditoriumRow';
   const type = isArc ? t.type : $('tableType').value;
   const n = Math.max(1, +$('seatCount').value || 1);
   const side = Math.max(0, +$('sideCount').value || 0);
   const chair = $('chairPos').value;
+  const rotation = ((+$('tableRotation').value || 0) % 360 + 360) % 360;
   const size = isArc ? { w: t.w, h: t.h } : computeTableSize(type, n, side);
 
   t.name = $('tableName').value.trim() || t.name;
   t.type = type;
   t.w = size.w;
   t.h = size.h;
+  t.rotation = rotation;
   t.chair = chair;
 
-  // 分離一般席與加位席保留姓名與 VIP 身分，同時避免殘留舊主席位
   const oldNormal = (t.seats || []).filter(s => s.role !== 'side');
   const oldSide = (t.seats || []).filter(s => s.role === 'side');
   const neu = makeSeats(n, side, chair, type);
@@ -429,11 +725,27 @@ function updateTable() {
   render();
 }
 
-function deleteTable() {
-  if (!selectedTable) return;
+function rotateSelectedTables(deg = 90) {
+  const ids = selectedTables.size ? [...selectedTables] : (selectedTable ? [selectedTable] : []);
+  if (!ids.length) return alert('請先點選欲旋轉的桌位！');
   pushHistory();
-  tables = tables.filter(x => x.id !== selectedTable);
+  ids.forEach(id => {
+    const t = tables.find(x => x.id === id);
+    if (t) t.rotation = (((t.rotation || 0) + deg) % 360 + 360) % 360;
+  });
+  const primary = tables.find(x => x.id === (selectedTable || ids[0]));
+  if (primary) $('tableRotation').value = primary.rotation || 0;
+  render();
+}
+
+function deleteTable() {
+  const ids = new Set(selectedTables);
+  if (selectedTable) ids.add(selectedTable);
+  if (!ids.size) return;
+  pushHistory();
+  tables = tables.filter(x => !ids.has(x.id));
   selectedTable = selectedSeat = null;
+  selectedTables.clear();
   render();
 }
 
@@ -624,7 +936,7 @@ window.addEventListener('keydown', e => {
       redo();
     }
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (selectedTable) {
+    if (selectedTable || selectedTables.size) {
       e.preventDefault();
       deleteTable();
     } else if (selectedStruct && selectedStruct !== 'stage') {
@@ -682,6 +994,7 @@ $('generateClassroom').onclick = () => {
         y,
         w: tableW,
         h: tableH,
+        rotation: 0,
         chair: 'none',
         seats: tableSeats
       });
@@ -731,6 +1044,7 @@ $('generateAuditorium').onclick = () => {
       y: Math.round(centerY + 30),
       w: arcWidth,
       h: 24,
+      rotation: 0,
       radius: curRadius,
       angleSpan,
       chair: 'none',
@@ -755,6 +1069,7 @@ $('generateAuditorium').onclick = () => {
 
 // 批次名單排位 Modal
 $('openBatchModal').onclick = () => $('batchModal').classList.add('show');
+if ($('openBatchModalSidebar')) $('openBatchModalSidebar').onclick = () => $('batchModal').classList.add('show');
 $('closeBatchModal').onclick = () => $('batchModal').classList.remove('show');
 
 $('batchToSelectedTable').onclick = () => {
@@ -815,15 +1130,18 @@ function autoArrange() {
   render();
 }
 
-function updateStatus(overlapCount = detectSeatOverlaps(tables).size) {
+function updateStatus(
+  overlapCount = detectSeatOverlaps(tables).size,
+  dupNameCount = findDuplicateNames(tables).names.length
+) {
   const totalSeats = tables.reduce((a, t) => a + t.seats.length, 0);
   const namedSeats = tables.reduce((a, t) => a + t.seats.filter(s => s.name).length, 0);
   const baseText = `桌區: ${tables.length}｜總席位: ${totalSeats}｜已排定: ${namedSeats} 人｜結構物: ${structures.length}`;
-  if (overlapCount > 0) {
-    $('status').innerHTML = `${esc(baseText)}｜<span class="overlap-warn">⚠️ 重疊席位: ${overlapCount}</span>`;
-  } else {
-    $('status').textContent = baseText + '｜✅ 零重疊';
-  }
+  const notes = [];
+  if (overlapCount > 0) notes.push(`<span class="overlap-warn">⚠️ 重疊席位: ${overlapCount}</span>`);
+  else notes.push('✅ 零重疊');
+  if (dupNameCount > 0) notes.push(`<span class="dup-warn">⚠️ 重複名單: ${dupNameCount} 組</span>`);
+  $('status').innerHTML = `${esc(baseText)}｜${notes.join('｜')}`;
 }
 
 function getProjectData() {
@@ -848,6 +1166,7 @@ function loadProjectData(raw) {
   structures = d.structures;
   tables = d.tables;
   selectedTable = selectedSeat = selectedStruct = null;
+  selectedTables.clear();
   render();
 }
 
@@ -893,6 +1212,18 @@ $('exportSvg').onclick = () => {
   download(new Blob([svgContent], { type: 'image/svg+xml' }), safeFileName($('meetingName').value) + '_向量圖.svg');
 };
 
+$('exportPng').onclick = async () => {
+  try {
+    const d = getProjectData();
+    const svg = buildProjectSvg(d);
+    const blob = await svgToPngBlob(svg, d.roomW, d.roomH + 48, 2);
+    download(blob, safeFileName(d.meetingName) + '_座位圖.png');
+    showToast('已匯出高解析 PNG 圖片。');
+  } catch (err) {
+    alert('匯出 PNG 失敗：' + (err?.message || err));
+  }
+};
+
 let saveTimer = null;
 function saveLocal() {
   clearTimeout(saveTimer);
@@ -901,7 +1232,7 @@ function saveLocal() {
   }, 180);
 }
 
-// 縮放控制
+// 縮放與輔助開關控制
 function applyZoom(val) {
   zoom = clamp(Math.round(val * 10) / 10, 0.4, 1.8);
   room.style.transform = `scale(${zoom})`;
@@ -911,6 +1242,20 @@ $('zoomIn').onclick = () => applyZoom(zoom + 0.1);
 $('zoomOut').onclick = () => applyZoom(zoom - 0.1);
 $('zoomReset').onclick = () => applyZoom(1);
 
+$('snapToggle').onclick = () => {
+  snapToGrid = !snapToGrid;
+  $('snapToggle').textContent = snapToGrid ? '🧲 網格吸附: 開' : '🧲 網格吸附: 關';
+  $('snapToggle').classList.toggle('active-toggle', snapToGrid);
+};
+
+$('lockLayoutBtn').onclick = () => {
+  layoutLocked = !layoutLocked;
+  $('lockLayoutBtn').textContent = layoutLocked ? '🔒 已鎖定' : '🔓 鎖定配置';
+  $('lockLayoutBtn').classList.toggle('active-toggle', layoutLocked);
+};
+
+$('seatSearch').addEventListener('input', () => applySearchHighlight(true));
+
 // 清空與重設
 $('clearAll').onclick = () => $('confirmModal').classList.add('show');
 $('cancelClear').onclick = () => $('confirmModal').classList.remove('show');
@@ -919,6 +1264,7 @@ $('confirmClear').onclick = () => {
   tables = [];
   structures = [];
   selectedTable = selectedSeat = selectedStruct = null;
+  selectedTables.clear();
   $('confirmModal').classList.remove('show');
   render();
 };
@@ -936,6 +1282,7 @@ $('addTable').onclick = () => addTable(true);
 $('updateTable').onclick = updateTable;
 $('deleteTable').onclick = deleteTable;
 $('duplicateTable').onclick = duplicateTable;
+$('rotateTable90').onclick = () => rotateSelectedTables(90);
 $('applySeat').onclick = applySeat;
 $('clearSeat').onclick = () => { $('seatName').value = ''; applySeat(); };
 $('autoArrange').onclick = autoArrange;

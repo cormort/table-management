@@ -48,6 +48,7 @@ export function sanitizeProjectData(d) {
           y: Number(t.y) || 0,
           w: Math.max(40, Number(t.w) || def.w),
           h: Math.max(20, Number(t.h) || def.h),
+          rotation: Number.isFinite(Number(t.rotation)) ? ((Number(t.rotation) % 360) + 360) % 360 : 0,
           chair: String(t.chair || 'none'),
           radius: Number.isFinite(Number(t.radius)) ? Number(t.radius) : undefined,
           angleSpan: Number.isFinite(Number(t.angleSpan)) ? Number(t.angleSpan) : undefined,
@@ -137,6 +138,8 @@ export function buildPreviewSvg(d) {
     `<text x="${d.stage.x + d.stage.w / 2}" y="${d.stage.y + d.stage.h / 2 + 8}" text-anchor="middle" font-size="22" font-weight="bold" fill="#ffffff">${esc(d.stage.text)}</text>`
   ];
   d.tables.forEach(t => {
+    const rot = t.rotation || 0;
+    if (rot) parts.push(`<g transform="rotate(${rot}, ${t.x + t.w / 2}, ${t.y + t.h / 2})">`);
     parts.push(renderTableSvgShape(t));
     const p = positions(t);
     t.seats.forEach(s => {
@@ -146,6 +149,7 @@ export function buildPreviewSvg(d) {
       const stroke = s.role === 'chairman' ? '#dc2626' : s.role === 'vip' ? '#7e22ce' : s.role === 'side' ? '#d97706' : '#2563a6';
       parts.push(`<g transform="translate(${t.x + q.x + 35}, ${t.y + q.y + 18}) rotate(${q.rotation || 0})"><rect x="-35" y="-18" width="70" height="36" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="3"/></g>`);
     });
+    if (rot) parts.push('</g>');
   });
   parts.push('</svg>');
   return parts.join('');
@@ -181,6 +185,8 @@ export function buildProjectSvg(d) {
   });
 
   (d.tables || []).forEach(t => {
+    const rot = t.rotation || 0;
+    if (rot) parts.push(`<g transform="rotate(${rot}, ${t.x + t.w / 2}, ${t.y + t.h / 2})">`);
     parts.push(renderTableSvgShape(t));
     if (t.type === 'auditoriumRow') {
       const ly = t.y + (t.radius || 250) - 36;
@@ -197,8 +203,36 @@ export function buildProjectSvg(d) {
       const stroke = s.role === 'chairman' ? '#dc2626' : s.role === 'vip' ? '#7e22ce' : s.role === 'side' ? '#d97706' : '#2563a6';
       parts.push(`<g transform="translate(${t.x + q.x + 35}, ${t.y + q.y + 18}) rotate(${q.rotation || 0})"><rect x="-35" y="-18" width="70" height="36" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="1.8"/><text x="0" y="-3" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#475569">${esc(s.no)}</text><text x="0" y="11" text-anchor="middle" font-family="Microsoft JhengHei, sans-serif" font-size="11" font-weight="bold" fill="#0f172a">${esc(s.name || '空席')}</text></g>`);
     });
+    if (rot) parts.push('</g>');
   });
 
   parts.push('</g></svg>');
   return parts.join('');
+}
+
+export function svgToPngBlob(svgString, width, height, scale = 2) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(width * scale);
+        canvas.height = Math.round(height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error('Canvas toBlob failed'));
+        }, 'image/png');
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => reject(new Error('SVG image load failed'));
+    img.src = dataUrl;
+  });
 }

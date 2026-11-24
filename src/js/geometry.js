@@ -256,16 +256,30 @@ export function boxesOverlapSAT(a, b) {
   return true;
 }
 
+export function rotatePoint(px, py, cx, cy, deg) {
+  if (!deg) return [px, py];
+  const rad = deg * Math.PI / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  const dx = px - cx;
+  const dy = py - cy;
+  return [cx + dx * c - dy * s, cy + dx * s + dy * c];
+}
+
 export function detectSeatOverlaps(tableList) {
   const boxes = [];
   (tableList || []).forEach(t => {
     const p = positions(t);
+    const tRot = t.rotation || 0;
+    const tcx = t.x + t.w / 2;
+    const tcy = t.y + t.h / 2;
     t.seats.forEach(s => {
       const q = p[s.id];
       if (!q) return;
+      const [cx, cy] = rotatePoint(t.x + q.x + 35, t.y + q.y + 18, tcx, tcy, tRot);
       boxes.push({
         id: s.id,
-        box: seatAxesCorners(t.x + q.x + 35, t.y + q.y + 18, 33.5, 16.5, q.rotation || 0)
+        box: seatAxesCorners(cx, cy, 33.5, 16.5, (q.rotation || 0) + tRot)
       });
     });
   });
@@ -288,19 +302,32 @@ export function detectSeatOverlaps(tableList) {
 // 計算桌位含四周席位的外接邊界
 export function tableFootprint(t) {
   const p = positions(t);
-  let minX = 0, minY = 0, maxX = t.w, maxY = t.h;
+  const tRot = t.rotation || 0;
+  const cxTable = t.w / 2;
+  const cyTable = t.h / 2;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const expandPoint = (px, py) => {
+    const [rx, ry] = rotatePoint(px, py, cxTable, cyTable, tRot);
+    minX = Math.min(minX, rx);
+    maxX = Math.max(maxX, rx);
+    minY = Math.min(minY, ry);
+    maxY = Math.max(maxY, ry);
+  };
+  expandPoint(0, 0);
+  expandPoint(t.w, 0);
+  expandPoint(t.w, t.h);
+  expandPoint(0, t.h);
   t.seats.forEach(s => {
     const q = p[s.id];
     if (!q) return;
-    const cx = q.x + 35;
-    const cy = q.y + 18;
-    const rad = (q.rotation || 0) * Math.PI / 180;
+    const [scx, scy] = rotatePoint(q.x + 35, q.y + 18, cxTable, cyTable, tRot);
+    const rad = ((q.rotation || 0) + tRot) * Math.PI / 180;
     const hw = 35 * Math.abs(Math.cos(rad)) + 18 * Math.abs(Math.sin(rad));
     const hh = 35 * Math.abs(Math.sin(rad)) + 18 * Math.abs(Math.cos(rad));
-    minX = Math.min(minX, cx - hw);
-    maxX = Math.max(maxX, cx + hw);
-    minY = Math.min(minY, cy - hh);
-    maxY = Math.max(maxY, cy + hh);
+    minX = Math.min(minX, scx - hw);
+    maxX = Math.max(maxX, scx + hw);
+    minY = Math.min(minY, scy - hh);
+    maxY = Math.max(maxY, scy + hh);
   });
   return {
     padL: Math.max(0, -minX),

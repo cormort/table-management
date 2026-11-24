@@ -144,6 +144,7 @@ textarea { min-height: 70px; resize: vertical; }
 .btn.red { background: #fee2e2; color: #991b1b; }
 .btn:hover:not(:disabled) { filter: brightness(0.93); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.active-toggle { background: var(--navy); color: #fff; }
 
 .toolbar {
   display: flex;
@@ -157,6 +158,27 @@ textarea { min-height: 70px; resize: vertical; }
   border: 1px solid #e2e8f0;
 }
 .toolbar .btn { padding: 6px 10px; font-size: 12px; }
+.toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  border-right: 1px solid #cbd5e1;
+}
+.toolbar-group:last-of-type { border-right: 0; padding-right: 0; }
+.export-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  margin: 12px 0 6px;
+}
+.toolbar-search {
+  width: 150px;
+  padding: 5px 9px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
 .status { margin-left: auto; font-size: 13px; color: #475569; font-weight: 600; }
 
 #roomWrap {
@@ -233,6 +255,7 @@ textarea { min-height: 70px; resize: vertical; }
   user-select: none;
   z-index: 15;
   isolation: isolate;
+  transform-origin: center center;
 }
 .tableShape {
   position: absolute;
@@ -331,7 +354,35 @@ textarea { min-height: 70px; resize: vertical; }
 .seat.vip { background: #f3e8ff; border-color: #7e22ce; color: #581c87; }
 .seat.selected { outline: 3px solid #16a34a !important; z-index: 25; }
 .seat.overlap { box-shadow: 0 0 0 2px #ef4444, 0 2px 6px rgba(239,68,68,0.35); }
+.seat.dragging { opacity: 0.45; }
+.seat.drop-target { outline: 3px dashed #2563a6 !important; transform: scale(1.06); z-index: 27; }
+.seat.match { box-shadow: 0 0 0 3px #10b981, 0 0 12px rgba(16,185,129,0.5); z-index: 26; }
+.seat.duplicate { box-shadow: 0 0 0 2px #f59e0b; }
+.seat-inline-input {
+  width: 64px;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid #2563a6;
+  border-radius: 4px;
+}
+.align-guide {
+  position: absolute;
+  pointer-events: none;
+  z-index: 40;
+}
+.align-guide.v { width: 0; border-left: 1.5px dashed #2563a6; top: 0; bottom: 0; }
+.align-guide.h { height: 0; border-top: 1.5px dashed #2563a6; left: 0; right: 0; }
+.marquee-box {
+  position: absolute;
+  border: 1.5px dashed #2563a6;
+  background: rgba(37, 99, 166, 0.12);
+  pointer-events: none;
+  z-index: 50;
+}
 .overlap-warn { color: #b42318; font-weight: 800; }
+.dup-warn { color: #b45309; font-weight: 800; }
 
 .legend {
   display: flex;
@@ -427,98 +478,50 @@ textarea { min-height: 70px; resize: vertical; }
     <div class="desc">支援常規桌型、教室矩陣、階梯大講堂弧形座位、門牆隔間與名單批次排位</div>
   </div>
   <div class="header-actions">
-    <button class="btn amber" id="openTemplateModal">🧩 內建座位版型</button>
-    <button class="btn green" id="openBatchModal">📋 批次名單排位</button>
-    <button class="btn primary" id="openClassroomModal">🏫 教室網格生成</button>
-    <button class="btn purple" id="openAuditoriumModal">🏟️ 大講堂弧形生成</button>
+    <button class="btn amber" id="openTemplateModal">🧩 1. 內建版型</button>
+    <button class="btn primary" id="openClassroomModal">🏫 教室網格</button>
+    <button class="btn purple" id="openAuditoriumModal">🏟️ 大講堂弧形</button>
+    <button class="btn green" id="openBatchModal">📋 2. 批次排位</button>
   </div>
 </header>
 
 <main class="app">
   <aside class="panel">
-    <!-- 標籤切換 -->
+    <!-- 步驟導向標籤切換 -->
     <div class="tabs">
-      <button class="tab-btn active" data-tab="tab-table">桌位編輯</button>
-      <button class="tab-btn" data-tab="tab-struct">結構門牆</button>
-      <button class="tab-btn" data-tab="tab-room">場地設定</button>
-      <button class="tab-btn" data-tab="tab-export">匯出與檔案</button>
+      <button class="tab-btn active" data-tab="tab-room">① 場地</button>
+      <button class="tab-btn" data-tab="tab-table">② 桌位</button>
+      <button class="tab-btn" data-tab="tab-seat">③ 排位</button>
+      <button class="tab-btn" data-tab="tab-export">④ 匯出</button>
     </div>
 
-    <!-- 標籤 1：桌位與席位編輯 -->
-    <div class="tab-content active" id="tab-table">
-      <h2>新增 / 調整桌位</h2>
+    <!-- 步驟 1：場地尺寸、講台與門牆結構 -->
+    <div class="tab-content active" id="tab-room">
+      <h2>場地與講台設定</h2>
       <div class="grid">
-        <div class="field">
-          <label>桌型配置</label>
-          <select id="tableType">
-            <option value="rect">長方桌 (雙側對坐)</option>
-            <option value="classroom">長條桌 (單側朝台)</option>
-            <option value="round">圓桌 (徑向旋轉)</option>
-            <option value="oval">橢圓桌 (徑向旋轉)</option>
-            <option value="uShape">U型桌 (開口向前)</option>
-            <option value="hollowSquare">口字型會議桌</option>
-          </select>
+        <div class="field full">
+          <label>會議 / 活動主題</label>
+          <input id="meetingName" value="2026 年度策略規劃會議座位配置表">
         </div>
         <div class="field">
-          <label>桌號 / 名稱</label>
-          <input id="tableName" value="第1桌">
+          <label>場地寬度 (px)</label>
+          <input id="roomW" type="number" min="800" max="3000" step="50" value="1200">
         </div>
         <div class="field">
-          <label>主席位 / 席數</label>
-          <input id="seatCount" type="number" min="1" max="40" value="8">
-        </div>
-        <div class="field">
-          <label>側面加位</label>
-          <input id="sideCount" type="number" min="0" max="12" value="0">
+          <label>場地高度 (px)</label>
+          <input id="roomH" type="number" min="600" max="2500" step="50" value="800">
         </div>
         <div class="field full">
-          <label>主席位置 (首長席)</label>
-          <select id="chairPos">
-            <option value="none">不指定主席位</option>
-            <option value="top">上方中央 (面向觀眾)</option>
-            <option value="bottom">下方中央</option>
-            <option value="left">左側中央</option>
-            <option value="right">右側中央</option>
-          </select>
+          <label>講台 / 舞台標題</label>
+          <input id="stageText" value="講台區 / 主席台 (Stage)">
         </div>
       </div>
       <div class="actions">
-        <button class="btn primary" id="addTable">➕ 新增此桌位</button>
-        <button class="btn green" id="updateTable">💾 更新選取桌位</button>
-        <button class="btn" id="duplicateTable">📄 複製桌位</button>
-        <button class="btn red" id="deleteTable">🗑️ 刪除選取桌位</button>
+        <button class="btn" id="centerStage">講台置中</button>
+        <button class="btn red" id="clearAll">清空全部畫布</button>
       </div>
 
-      <h2>單一席位資料</h2>
-      <div class="grid">
-        <div class="field full">
-          <label>姓名 / 單位</label>
-          <input id="seatName" placeholder="點選畫布席位後直接輸入">
-        </div>
-        <div class="field">
-          <label>席位身份</label>
-          <select id="seatRole">
-            <option value="normal">一般席</option>
-            <option value="chairman">主席 / 首長席</option>
-            <option value="vip">貴賓 / 講員席</option>
-            <option value="side">側面加位</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>席次編號 / 職稱</label>
-          <input id="seatNo" placeholder="如 01, 分機721">
-        </div>
-      </div>
-      <div class="actions">
-        <button class="btn green" id="applySeat">套用席位</button>
-        <button class="btn" id="clearSeat">清空姓名</button>
-      </div>
-    </div>
-
-    <!-- 標籤 2：場地結構物件（門、牆、柱、講台） -->
-    <div class="tab-content" id="tab-struct">
-      <h2>場地結構物件</h2>
-      <p class="note">在畫布上擺放隔間牆、進出門與立柱，標示場地真實動線。</p>
+      <h2>門牆與結構物</h2>
       <div class="grid">
         <div class="field">
           <label>結構類別</label>
@@ -544,61 +547,123 @@ textarea { min-height: 70px; resize: vertical; }
           <input id="structH" type="number" value="14">
         </div>
       </div>
-      <div class="actions">
-        <button class="btn primary" id="addStruct">➕ 擺放結構物</button>
-        <button class="btn green" id="updateStruct">💾 更新結構物</button>
-        <button class="btn red" id="deleteStruct">🗑️ 刪除結構物</button>
+      <div class="actions three">
+        <button class="btn primary" id="addStruct">➕ 擺放</button>
+        <button class="btn green" id="updateStruct">💾 更新</button>
+        <button class="btn red" id="deleteStruct">🗑️ 刪除</button>
       </div>
-      
-      <h2>預設結構快速置入</h2>
       <div class="actions">
-        <button class="btn" id="quickAddDoorLeft">🚪 增設左側進出門</button>
-        <button class="btn" id="quickAddDoorRight">🚪 增設右側進出門</button>
+        <button class="btn" id="quickAddDoorLeft">🚪 左側進出門</button>
+        <button class="btn" id="quickAddDoorRight">🚪 右側進出門</button>
       </div>
     </div>
 
-    <!-- 標籤 3：會議室與講台基本設定 -->
-    <div class="tab-content" id="tab-room">
-      <h2>會議室整體尺寸</h2>
+    <!-- 步驟 2：桌位配置 -->
+    <div class="tab-content" id="tab-table">
+      <h2>新增 / 調整桌位</h2>
+      <div class="grid">
+        <div class="field">
+          <label>桌型配置</label>
+          <select id="tableType">
+            <option value="rect">長方桌 (雙側對坐)</option>
+            <option value="classroom">長條桌 (單側朝台)</option>
+            <option value="round">圓桌 (徑向旋轉)</option>
+            <option value="oval">橢圓桌 (徑向旋轉)</option>
+            <option value="uShape">U型桌 (開口向前)</option>
+            <option value="hollowSquare">口字型會議桌</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>桌號 / 名稱</label>
+          <input id="tableName" value="第1桌">
+        </div>
+        <div class="field">
+          <label>主席位 / 席數</label>
+          <input id="seatCount" type="number" min="1" max="40" value="8">
+        </div>
+        <div class="field">
+          <label>側面加位</label>
+          <input id="sideCount" type="number" min="0" max="12" value="0">
+        </div>
+        <div class="field">
+          <label>主席位置 (首長席)</label>
+          <select id="chairPos">
+            <option value="none">不指定主席位</option>
+            <option value="top">上方中央 (面向觀眾)</option>
+            <option value="bottom">下方中央</option>
+            <option value="left">左側中央</option>
+            <option value="right">右側中央</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>旋轉角度 (°)</label>
+          <div style="display:flex;gap:4px;">
+            <input id="tableRotation" type="number" min="0" max="359" step="15" value="0">
+            <button class="btn" id="rotateTable90" type="button" title="順時針旋轉 90°" style="white-space:nowrap;">🔄 90°</button>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="addTable">➕ 新增此桌位</button>
+        <button class="btn green" id="updateTable">💾 更新選取桌位</button>
+        <button class="btn" id="duplicateTable">📄 複製桌位</button>
+        <button class="btn red" id="deleteTable">🗑️ 刪除選取桌位</button>
+      </div>
+      <p class="note">💡 提示：按住 <code>Shift</code> 點擊或於空白處拖曳可框選多桌，一併移動、旋轉或刪除。</p>
+    </div>
+
+    <!-- 步驟 3：人員排位與微調 -->
+    <div class="tab-content" id="tab-seat">
+      <h2>快速批次排位</h2>
+      <button class="btn green" id="openBatchModalSidebar" style="width:100%;">📋 匯入與會名單批次排位</button>
+      <p class="note">💡 可於畫布<b>雙擊席位</b>直接輸入姓名，或<b>拖曳席位到另一席位</b>直接對調人選。</p>
+
+      <h2>單一席位微調</h2>
       <div class="grid">
         <div class="field full">
-          <label>會議 / 活動主題</label>
-          <input id="meetingName" value="2026 年度策略規劃會議座位配置表">
+          <label>姓名 / 單位</label>
+          <input id="seatName" placeholder="點選畫布席位後直接輸入">
         </div>
         <div class="field">
-          <label>場地寬度 (px)</label>
-          <input id="roomW" type="number" min="800" max="3000" step="50" value="1200">
+          <label>席位身份</label>
+          <select id="seatRole">
+            <option value="normal">一般席</option>
+            <option value="chairman">主席 / 首長席</option>
+            <option value="vip">貴賓 / 講員席</option>
+            <option value="side">側面加位</option>
+          </select>
         </div>
         <div class="field">
-          <label>場地高度 (px)</label>
-          <input id="roomH" type="number" min="600" max="2500" step="50" value="800">
-        </div>
-        <div class="field full">
-          <label>講台 / 舞台標題</label>
-          <input id="stageText" value="講台區 / 主席台 (Stage)">
+          <label>席次編號 / 職稱</label>
+          <input id="seatNo" placeholder="如 01, 分機721">
         </div>
       </div>
       <div class="actions">
-        <button class="btn" id="centerStage">講台置中</button>
-        <button class="btn red" id="clearAll">清空全部畫布</button>
+        <button class="btn green" id="applySeat">套用席位</button>
+        <button class="btn" id="clearSeat">清空姓名</button>
       </div>
     </div>
 
-    <!-- 標籤 4：檔案匯出與備份 -->
+    <!-- 步驟 4：匯出與備份 -->
     <div class="tab-content" id="tab-export">
-      <h2>檔案匯出與備份</h2>
+      <h2>匯出與檔案備份</h2>
+      <div class="export-group-label">圖片與簡報交付</div>
       <div class="actions">
+        <button class="btn amber" id="exportPng">🖼️ 匯出高解析 PNG</button>
+        <button class="btn green" id="exportSvg">🎨 匯出向量 SVG</button>
+        <button class="btn primary" id="printBtn" style="grid-column: 1 / -1;">🖨️ 列印 / 另存 PDF</button>
+      </div>
+
+      <div class="export-group-label">名單與專案檔</div>
+      <div class="actions">
+        <button class="btn purple" id="exportCsv" style="grid-column: 1 / -1;">📊 匯出席次 CSV (Excel)</button>
         <button class="btn green" id="exportJson">📦 匯出配置 JSON</button>
         <button class="btn" id="importJson">📥 匯入配置 JSON</button>
-        <button class="btn green" id="exportSvg">🎨 匯出向量 SVG</button>
-        <button class="btn purple" id="exportCsv">📊 匯出席次 CSV (Excel)</button>
-        <button class="btn primary" id="printBtn">🖨️ 列印 / 另存 PDF</button>
       </div>
       <input id="jsonFile" type="file" accept="application/json,.json" hidden>
       <p class="note">
-        • <b>SVG 向量檔</b>：保留精準旋轉角度與門牆結構，可直接置入 PowerPoint 或 Illustrator。<br>
-        • <b>CSV 席次清冊</b>：帶有 UTF-8 BOM，微軟 Excel 開啟繁體中文絕不亂碼。<br>
-        • <b>JSON 備份檔</b>：保存完整座標、結構與姓名，方便隨時復原續編。
+        • <b>PNG / SVG</b>：PNG 適合直接貼入聊天室與文件；SVG 可置入簡報無限縮放。<br>
+        • <b>CSV / JSON</b>：CSV 含 UTF-8 BOM 防亂碼與防公式注入；JSON 保留完整配置供續編。
       </p>
     </div>
   </aside>
@@ -606,12 +671,23 @@ textarea { min-height: 70px; resize: vertical; }
   <!-- 工作畫布區 -->
   <section class="workspace">
     <div class="toolbar">
-      <button class="btn" id="zoomOut">🔍 縮小</button>
-      <button class="btn" id="zoomReset">100%</button>
-      <button class="btn" id="zoomIn">放大</button>
-      <button class="btn" id="autoArrange">📐 桌位防重疊排列</button>
-      <button class="btn" id="undoBtn" disabled title="復原上一步 (Ctrl+Z)">↩️ 復原</button>
-      <button class="btn" id="redoBtn" disabled title="重做 (Ctrl+Y / Cmd+Shift+Z)">↪️ 重做</button>
+      <div class="toolbar-group">
+        <button class="btn" id="zoomOut">🔍 縮小</button>
+        <button class="btn" id="zoomReset">100%</button>
+        <button class="btn" id="zoomIn">放大</button>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn" id="autoArrange">📐 防重疊排列</button>
+        <button class="btn" id="snapToggle" title="拖曳時吸附 10px 網格">🧲 網格吸附: 關</button>
+        <button class="btn" id="lockLayoutBtn" title="鎖定桌位與門牆位置，防止誤拖">🔓 鎖定配置</button>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn" id="undoBtn" disabled title="復原上一步 (Ctrl+Z)">↩️ 復原</button>
+        <button class="btn" id="redoBtn" disabled title="重做 (Ctrl+Y / Cmd+Shift+Z)">↪️ 重做</button>
+      </div>
+      <div class="toolbar-group">
+        <input id="seatSearch" class="toolbar-search" placeholder="🔍 搜尋姓名...">
+      </div>
       <span class="status" id="status">桌數: 0｜席位: 0</span>
     </div>
 
@@ -627,7 +703,7 @@ textarea { min-height: 70px; resize: vertical; }
       <span><i class="dot chairDot"></i>主席席</span>
       <span><i class="dot vipDot"></i>貴賓/講員席</span>
       <span><i class="dot sideDot"></i>側面加位</span>
-      <span style="margin-left:auto; color:#64748b;">💡 提示：點擊席位直接輸入姓名；拖曳桌位或門牆移動；支援圓桌/階梯弧形徑向角度。</span>
+      <span style="margin-left:auto; color:#64748b;">💡 提示：雙擊席位快編姓名；拖曳席位可對調；Shift+點擊或空白處拖曳框選多桌。</span>
     </div>
   </section>
 </main>
@@ -804,6 +880,26 @@ function parseNames(raw) {
 }
 function safeFileName(meetingName) {
   return (String(meetingName || '').trim() || '會議座位表').replace(/[\/:*?"<>|]/g, '_');
+}
+function findDuplicateNames(tableList) {
+  const nameToIds = new Map();
+  (tableList || []).forEach(t => {
+    (t.seats || []).forEach(s => {
+      const n = String(s.name || '').trim();
+      if (!n) return;
+      if (!nameToIds.has(n)) nameToIds.set(n, []);
+      nameToIds.get(n).push(s.id);
+    });
+  });
+  const seatIds = new Set();
+  const names = [];
+  for (const [name, ids] of nameToIds.entries()) {
+    if (ids.length > 1) {
+      names.push(name);
+      ids.forEach(id => seatIds.add(id));
+    }
+  }
+  return { seatIds, names };
 }
 
   // === geometry.js ===
@@ -1059,16 +1155,29 @@ function boxesOverlapSAT(a, b) {
   }
   return true;
 }
+function rotatePoint(px, py, cx, cy, deg) {
+  if (!deg) return [px, py];
+  const rad = deg * Math.PI / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  const dx = px - cx;
+  const dy = py - cy;
+  return [cx + dx * c - dy * s, cy + dx * s + dy * c];
+}
 function detectSeatOverlaps(tableList) {
   const boxes = [];
   (tableList || []).forEach(t => {
     const p = positions(t);
+    const tRot = t.rotation || 0;
+    const tcx = t.x + t.w / 2;
+    const tcy = t.y + t.h / 2;
     t.seats.forEach(s => {
       const q = p[s.id];
       if (!q) return;
+      const [cx, cy] = rotatePoint(t.x + q.x + 35, t.y + q.y + 18, tcx, tcy, tRot);
       boxes.push({
         id: s.id,
-        box: seatAxesCorners(t.x + q.x + 35, t.y + q.y + 18, 33.5, 16.5, q.rotation || 0)
+        box: seatAxesCorners(cx, cy, 33.5, 16.5, (q.rotation || 0) + tRot)
       });
     });
   });
@@ -1091,19 +1200,32 @@ function detectSeatOverlaps(tableList) {
 // 計算桌位含四周席位的外接邊界
 function tableFootprint(t) {
   const p = positions(t);
-  let minX = 0, minY = 0, maxX = t.w, maxY = t.h;
+  const tRot = t.rotation || 0;
+  const cxTable = t.w / 2;
+  const cyTable = t.h / 2;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const expandPoint = (px, py) => {
+    const [rx, ry] = rotatePoint(px, py, cxTable, cyTable, tRot);
+    minX = Math.min(minX, rx);
+    maxX = Math.max(maxX, rx);
+    minY = Math.min(minY, ry);
+    maxY = Math.max(maxY, ry);
+  };
+  expandPoint(0, 0);
+  expandPoint(t.w, 0);
+  expandPoint(t.w, t.h);
+  expandPoint(0, t.h);
   t.seats.forEach(s => {
     const q = p[s.id];
     if (!q) return;
-    const cx = q.x + 35;
-    const cy = q.y + 18;
-    const rad = (q.rotation || 0) * Math.PI / 180;
+    const [scx, scy] = rotatePoint(q.x + 35, q.y + 18, cxTable, cyTable, tRot);
+    const rad = ((q.rotation || 0) + tRot) * Math.PI / 180;
     const hw = 35 * Math.abs(Math.cos(rad)) + 18 * Math.abs(Math.sin(rad));
     const hh = 35 * Math.abs(Math.sin(rad)) + 18 * Math.abs(Math.cos(rad));
-    minX = Math.min(minX, cx - hw);
-    maxX = Math.max(maxX, cx + hw);
-    minY = Math.min(minY, cy - hh);
-    maxY = Math.max(maxY, cy + hh);
+    minX = Math.min(minX, scx - hw);
+    maxX = Math.max(maxX, scx + hw);
+    minY = Math.min(minY, scy - hh);
+    maxY = Math.max(maxY, scy + hh);
   });
   return {
     padL: Math.max(0, -minX),
@@ -1308,6 +1430,7 @@ function sanitizeProjectData(d) {
           y: Number(t.y) || 0,
           w: Math.max(40, Number(t.w) || def.w),
           h: Math.max(20, Number(t.h) || def.h),
+          rotation: Number.isFinite(Number(t.rotation)) ? ((Number(t.rotation) % 360) + 360) % 360 : 0,
           chair: String(t.chair || 'none'),
           radius: Number.isFinite(Number(t.radius)) ? Number(t.radius) : undefined,
           angleSpan: Number.isFinite(Number(t.angleSpan)) ? Number(t.angleSpan) : undefined,
@@ -1394,6 +1517,8 @@ function buildPreviewSvg(d) {
     `<text x="${d.stage.x + d.stage.w / 2}" y="${d.stage.y + d.stage.h / 2 + 8}" text-anchor="middle" font-size="22" font-weight="bold" fill="#ffffff">${esc(d.stage.text)}</text>`
   ];
   d.tables.forEach(t => {
+    const rot = t.rotation || 0;
+    if (rot) parts.push(`<g transform="rotate(${rot}, ${t.x + t.w / 2}, ${t.y + t.h / 2})">`);
     parts.push(renderTableSvgShape(t));
     const p = positions(t);
     t.seats.forEach(s => {
@@ -1403,6 +1528,7 @@ function buildPreviewSvg(d) {
       const stroke = s.role === 'chairman' ? '#dc2626' : s.role === 'vip' ? '#7e22ce' : s.role === 'side' ? '#d97706' : '#2563a6';
       parts.push(`<g transform="translate(${t.x + q.x + 35}, ${t.y + q.y + 18}) rotate(${q.rotation || 0})"><rect x="-35" y="-18" width="70" height="36" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="3"/></g>`);
     });
+    if (rot) parts.push('</g>');
   });
   parts.push('</svg>');
   return parts.join('');
@@ -1437,6 +1563,8 @@ function buildProjectSvg(d) {
   });
 
   (d.tables || []).forEach(t => {
+    const rot = t.rotation || 0;
+    if (rot) parts.push(`<g transform="rotate(${rot}, ${t.x + t.w / 2}, ${t.y + t.h / 2})">`);
     parts.push(renderTableSvgShape(t));
     if (t.type === 'auditoriumRow') {
       const ly = t.y + (t.radius || 250) - 36;
@@ -1453,10 +1581,37 @@ function buildProjectSvg(d) {
       const stroke = s.role === 'chairman' ? '#dc2626' : s.role === 'vip' ? '#7e22ce' : s.role === 'side' ? '#d97706' : '#2563a6';
       parts.push(`<g transform="translate(${t.x + q.x + 35}, ${t.y + q.y + 18}) rotate(${q.rotation || 0})"><rect x="-35" y="-18" width="70" height="36" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="1.8"/><text x="0" y="-3" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#475569">${esc(s.no)}</text><text x="0" y="11" text-anchor="middle" font-family="Microsoft JhengHei, sans-serif" font-size="11" font-weight="bold" fill="#0f172a">${esc(s.name || '空席')}</text></g>`);
     });
+    if (rot) parts.push('</g>');
   });
 
   parts.push('</g></svg>');
   return parts.join('');
+}
+function svgToPngBlob(svgString, width, height, scale = 2) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(width * scale);
+        canvas.height = Math.round(height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error('Canvas toBlob failed'));
+        }, 'image/png');
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => reject(new Error('SVG image load failed'));
+    img.src = dataUrl;
+  });
 }
 
   // === app.js ===
@@ -1471,10 +1626,15 @@ let structures = [];
 let stageConfig = { x: 420, y: 16, w: 360, h: 52, text: '講台區 / 主席台 (Stage)' };
 
 let selectedTable = null;
+const selectedTables = new Set();
 let selectedSeat = null;
 let selectedStruct = null;
 let zoom = 1;
+let snapToGrid = false;
+let layoutLocked = false;
 let drag = null;
+let marquee = null;
+let dragSeatInfo = null;
 let toastTimer = null;
 const undoStack = [];
 const redoStack = [];
@@ -1533,10 +1693,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 function refreshOverlapMarkers() {
   const overlaps = detectSeatOverlaps(tables);
+  const dup = findDuplicateNames(tables);
   room.querySelectorAll('.seat').forEach(se => {
     se.classList.toggle('overlap', overlaps.has(se.dataset.seat));
+    se.classList.toggle('duplicate', dup.seatIds.has(se.dataset.seat));
   });
-  updateStatus(overlaps.size);
+  updateStatus(overlaps.size, dup.names.length);
 }
 
 // 僅更新選取樣式，不重建 DOM (確保拖曳穩定)
@@ -1546,11 +1708,27 @@ function syncSelectionUI() {
     el.classList.toggle('selected', el.dataset.id === selectedStruct);
   });
   room.querySelectorAll('.tableObj').forEach(el => {
-    el.classList.toggle('selected', el.dataset.id === selectedTable);
+    const id = el.dataset.id;
+    el.classList.toggle('selected', id === selectedTable || selectedTables.has(id));
   });
   room.querySelectorAll('.seat').forEach(el => {
     el.classList.toggle('selected', el.dataset.seat === selectedSeat);
   });
+}
+
+function applySearchHighlight(scrollFirst = false) {
+  const q = ($('seatSearch')?.value || '').trim().toLowerCase();
+  let firstMatch = null;
+  room.querySelectorAll('.seat').forEach(se => {
+    const nameEl = se.querySelector('.name');
+    const txt = (nameEl?.textContent || '').trim();
+    const isMatch = Boolean(q && txt && txt !== '空席' && txt.toLowerCase().includes(q));
+    se.classList.toggle('match', isMatch);
+    if (isMatch && !firstMatch) firstMatch = se;
+  });
+  if (scrollFirst && firstMatch) {
+    firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }
 }
 
 function structSvgMarkup(st) {
@@ -1584,9 +1762,59 @@ function structSvgMarkup(st) {
   return `<div class="structPillar" style="width:100%;height:100%;"></div>`;
 }
 
+function swapSeats(tid1, sid1, tid2, sid2) {
+  if (sid1 === sid2) return;
+  const t1 = tables.find(x => x.id === tid1);
+  const t2 = tables.find(x => x.id === tid2);
+  const s1 = t1?.seats.find(x => x.id === sid1);
+  const s2 = t2?.seats.find(x => x.id === sid2);
+  if (!s1 || !s2) return;
+  pushHistory();
+  const tmpName = s1.name;
+  s1.name = s2.name;
+  s2.name = tmpName;
+  render();
+  showToast('已對調席位姓名。');
+}
+
+function openInlineSeatEditor(se, tid, sid) {
+  const t = tables.find(x => x.id === tid);
+  const s = t?.seats.find(x => x.id === sid);
+  if (!s) return;
+  const inp = document.createElement('input');
+  inp.className = 'seat-inline-input';
+  inp.value = s.name || '';
+  inp.placeholder = '姓名';
+  se.innerHTML = '';
+  se.appendChild(inp);
+  inp.focus();
+  inp.select();
+
+  let done = false;
+  const commit = save => {
+    if (done) return;
+    done = true;
+    const nextVal = inp.value.trim();
+    if (save && nextVal !== (s.name || '')) {
+      pushHistory();
+      s.name = nextVal;
+      if (selectedSeat === sid) $('seatName').value = nextVal;
+    }
+    render();
+  };
+  inp.onclick = e => e.stopPropagation();
+  inp.onpointerdown = e => e.stopPropagation();
+  inp.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit(true);
+    else if (e.key === 'Escape') commit(false);
+  };
+  inp.onblur = () => commit(true);
+}
+
 // 繪製與渲染畫布
 function render() {
-  room.querySelectorAll('.tableObj, .structObj').forEach(el => el.remove());
+  room.querySelectorAll('.tableObj, .structObj, .align-guide, .marquee-box').forEach(el => el.remove());
 
   const rw = clamp(+$('roomW').value || 1200, 600, 3600);
   const rh = clamp(+$('roomH').value || 800, 500, 3000);
@@ -1617,6 +1845,7 @@ function render() {
   });
 
   const overlaps = detectSeatOverlaps(tables);
+  const dup = findDuplicateNames(tables);
 
   // 渲染桌位與席位
   tables.forEach(t => {
@@ -1627,7 +1856,8 @@ function render() {
       left: t.x + 'px',
       top: t.y + 'px',
       width: t.w + 'px',
-      height: t.h + 'px'
+      height: t.h + 'px',
+      transform: t.rotation ? `rotate(${t.rotation}deg)` : ''
     });
 
     const sh = document.createElement('div');
@@ -1646,18 +1876,54 @@ function render() {
       const q = p[s.id];
       if (!q) return;
       const se = document.createElement('div');
-      se.className = `seat ${s.role}` + (overlaps.has(s.id) ? ' overlap' : '');
+      se.className = `seat ${s.role}`
+        + (overlaps.has(s.id) ? ' overlap' : '')
+        + (dup.seatIds.has(s.id) ? ' duplicate' : '');
       se.dataset.seat = s.id;
+      se.draggable = true;
       se.style.left = q.x + 'px';
       se.style.top = q.y + 'px';
       se.style.transform = `rotate(${q.rotation || 0}deg)`;
       se.innerHTML = `<span class="no">${esc(s.no)}</span><span class="name">${esc(s.name || '空席')}</span>`;
-      se.title = `${t.name}｜${s.no}號席${s.name ? '：' + s.name : ''}`;
+      se.title = `${t.name}｜${s.no}號席${s.name ? '：' + s.name : ''}（雙擊快編／拖曳對調）`;
+
       se.onpointerdown = e => e.stopPropagation();
       se.onclick = e => {
         e.stopPropagation();
         selectSeat(t.id, s.id);
       };
+      se.ondblclick = e => {
+        e.stopPropagation();
+        openInlineSeatEditor(se, t.id, s.id);
+      };
+      se.ondragstart = e => {
+        e.stopPropagation();
+        dragSeatInfo = { tid: t.id, sid: s.id };
+        se.classList.add('dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', s.id);
+        }
+      };
+      se.ondragover = e => {
+        if (!dragSeatInfo || dragSeatInfo.sid === s.id) return;
+        e.preventDefault();
+        se.classList.add('drop-target');
+      };
+      se.ondragleave = () => se.classList.remove('drop-target');
+      se.ondrop = e => {
+        e.preventDefault();
+        e.stopPropagation();
+        se.classList.remove('drop-target');
+        if (dragSeatInfo) swapSeats(dragSeatInfo.tid, dragSeatInfo.sid, t.id, s.id);
+        dragSeatInfo = null;
+      };
+      se.ondragend = () => {
+        se.classList.remove('dragging');
+        room.querySelectorAll('.seat.drop-target').forEach(node => node.classList.remove('drop-target'));
+        dragSeatInfo = null;
+      };
+
       el.appendChild(se);
     });
 
@@ -1666,35 +1932,91 @@ function render() {
   });
 
   syncSelectionUI();
-  updateStatus(overlaps.size);
+  applySearchHighlight(false);
+  updateStatus(overlaps.size, dup.names.length);
   saveLocal();
 }
 
-// 高效拖曳處理 (不重建 DOM，避免 pointerCapture 失效)
+function clearAlignGuides() {
+  room.querySelectorAll('.align-guide').forEach(g => g.remove());
+}
+
+function showAlignGuides(vx, hy) {
+  clearAlignGuides();
+  if (vx !== null) {
+    const g = document.createElement('div');
+    g.className = 'align-guide v';
+    g.style.left = vx + 'px';
+    room.appendChild(g);
+  }
+  if (hy !== null) {
+    const g = document.createElement('div');
+    g.className = 'align-guide h';
+    g.style.top = hy + 'px';
+    room.appendChild(g);
+  }
+}
+
+// 高效拖曳處理 (支援鎖定、多選群組拖曳、網格吸附與對齊輔助線)
 function startDrag(e, id, kind) {
   if (e.button !== 0) return;
   if (e.target.closest('.seat')) return;
   e.stopPropagation();
+
+  if (kind === 'table' && e.shiftKey) {
+    if (selectedTables.has(id)) {
+      selectedTables.delete(id);
+      if (selectedTable === id) selectedTable = [...selectedTables][0] || null;
+    } else {
+      selectedTables.add(id);
+      selectedTable = id;
+    }
+    selectedSeat = null;
+    selectedStruct = null;
+    syncSelectionUI();
+    return;
+  }
+
   const targetEl = e.currentTarget;
   let obj;
+  let group = null;
+
   if (kind === 'table') {
-    selectTable(id, true);
-    obj = tables.find(x => x.id === id);
+    if (selectedTables.has(id) && selectedTables.size > 1) {
+      selectedTable = id;
+      selectedSeat = null;
+      selectedStruct = null;
+      syncSelectionUI();
+      obj = tables.find(x => x.id === id);
+      if (!layoutLocked) {
+        group = [...selectedTables].map(tid => {
+          const item = tables.find(x => x.id === tid);
+          const itemEl = room.querySelector(`.tableObj[data-id="${tid}"]`);
+          return item && itemEl ? { obj: item, el: itemEl, ox: item.x, oy: item.y } : null;
+        }).filter(Boolean);
+      }
+    } else {
+      selectTable(id, true);
+      obj = tables.find(x => x.id === id);
+    }
   } else if (kind === 'struct') {
     selectStruct(id, true);
     obj = structures.find(x => x.id === id);
   } else if (kind === 'stage') {
     selectedStruct = 'stage';
     selectedTable = selectedSeat = null;
+    selectedTables.clear();
     syncSelectionUI();
     obj = stageConfig;
   }
-  if (!obj) return;
+
+  if (!obj || layoutLocked) return;
 
   drag = {
     kind,
     obj,
     el: targetEl,
+    group,
     sx: e.clientX,
     sy: e.clientY,
     ox: obj.x,
@@ -1706,21 +2028,49 @@ function startDrag(e, id, kind) {
 
 stageEl.onpointerdown = e => startDrag(e, 'stage', 'stage');
 
-// 點擊空白畫布取消選取
+// 點擊空白畫布取消選取或開始框選多桌
 room.addEventListener('pointerdown', e => {
-  if (e.target === room) {
-    selectedTable = selectedSeat = selectedStruct = null;
-    syncSelectionUI();
-  }
+  if (e.target !== room || e.button !== 0) return;
+  selectedTable = selectedSeat = selectedStruct = null;
+  selectedTables.clear();
+  syncSelectionUI();
+
+  const rect = room.getBoundingClientRect();
+  const startX = (e.clientX - rect.left) / zoom;
+  const startY = (e.clientY - rect.top) / zoom;
+  const boxEl = document.createElement('div');
+  boxEl.className = 'marquee-box';
+  room.appendChild(boxEl);
+  marquee = { startX, startY, curX: startX, curY: startY, boxEl, moved: false };
 });
+
 roomWrap.addEventListener('pointerdown', e => {
   if (e.target === roomWrap) {
     selectedTable = selectedSeat = selectedStruct = null;
+    selectedTables.clear();
     syncSelectionUI();
   }
 });
 
 window.addEventListener('pointermove', e => {
+  if (marquee) {
+    const rect = room.getBoundingClientRect();
+    marquee.curX = (e.clientX - rect.left) / zoom;
+    marquee.curY = (e.clientY - rect.top) / zoom;
+    const x = Math.min(marquee.startX, marquee.curX);
+    const y = Math.min(marquee.startY, marquee.curY);
+    const w = Math.abs(marquee.curX - marquee.startX);
+    const h = Math.abs(marquee.curY - marquee.startY);
+    if (w > 4 || h > 4) marquee.moved = true;
+    Object.assign(marquee.boxEl.style, {
+      left: x + 'px',
+      top: y + 'px',
+      width: w + 'px',
+      height: h + 'px'
+    });
+    return;
+  }
+
   if (!drag) return;
   const dx = (e.clientX - drag.sx) / zoom;
   const dy = (e.clientY - drag.sy) / zoom;
@@ -1728,21 +2078,111 @@ window.addEventListener('pointermove', e => {
     pushHistory();
     drag.moved = true;
   }
+
   const rw = +$('roomW').value || 1200;
   const rh = +$('roomH').value || 800;
+
+  if (drag.group && drag.group.length > 1) {
+    let gdx = Math.round(dx);
+    let gdy = Math.round(dy);
+    if (snapToGrid) {
+      gdx = Math.round((drag.ox + dx) / 10) * 10 - drag.ox;
+      gdy = Math.round((drag.oy + dy) / 10) * 10 - drag.oy;
+    }
+    drag.group.forEach(item => {
+      const mx = Math.max(0, rw - (item.obj.w || 0));
+      const my = Math.max(0, rh - (item.obj.h || 0));
+      item.curX = clamp(item.ox + gdx, 0, mx);
+      item.curY = clamp(item.oy + gdy, 0, my);
+      item.el.style.left = item.curX + 'px';
+      item.el.style.top = item.curY + 'px';
+    });
+    return;
+  }
+
   const maxX = Math.max(0, rw - (drag.obj.w || 0));
   const maxY = Math.max(0, rh - (drag.obj.h || 0));
-  drag.curX = clamp(Math.round(drag.ox + dx), 0, maxX);
-  drag.curY = clamp(Math.round(drag.oy + dy), 0, maxY);
+  let nx = Math.round(drag.ox + dx);
+  let ny = Math.round(drag.oy + dy);
+  if (snapToGrid) {
+    nx = Math.round(nx / 10) * 10;
+    ny = Math.round(ny / 10) * 10;
+  }
+
+  // 與其他桌位或講台邊緣／中心對齊輔助線
+  let guideX = null;
+  let guideY = null;
+  const w = drag.obj.w || 0;
+  const h = drag.obj.h || 0;
+  const targets = [stageConfig, ...tables.filter(t => t !== drag.obj)];
+  for (const other of targets) {
+    const ow = other.w || 0;
+    const oh = other.h || 0;
+    if (guideX === null) {
+      if (Math.abs(nx - other.x) <= 6) { nx = other.x; guideX = other.x; }
+      else if (Math.abs((nx + w / 2) - (other.x + ow / 2)) <= 6) {
+        nx = Math.round(other.x + ow / 2 - w / 2);
+        guideX = Math.round(other.x + ow / 2);
+      } else if (Math.abs((nx + w) - (other.x + ow)) <= 6) {
+        nx = Math.round(other.x + ow - w);
+        guideX = Math.round(other.x + ow);
+      }
+    }
+    if (guideY === null) {
+      if (Math.abs(ny - other.y) <= 6) { ny = other.y; guideY = other.y; }
+      else if (Math.abs((ny + h / 2) - (other.y + oh / 2)) <= 6) {
+        ny = Math.round(other.y + oh / 2 - h / 2);
+        guideY = Math.round(other.y + oh / 2);
+      } else if (Math.abs((ny + h) - (other.y + oh)) <= 6) {
+        ny = Math.round(other.y + oh - h);
+        guideY = Math.round(other.y + oh);
+      }
+    }
+    if (guideX !== null && guideY !== null) break;
+  }
+  showAlignGuides(guideX, guideY);
+
+  drag.curX = clamp(nx, 0, maxX);
+  drag.curY = clamp(ny, 0, maxY);
   drag.el.style.left = drag.curX + 'px';
   drag.el.style.top = drag.curY + 'px';
 });
 
 function finishDrag() {
+  if (marquee) {
+    const x1 = Math.min(marquee.startX, marquee.curX);
+    const y1 = Math.min(marquee.startY, marquee.curY);
+    const x2 = Math.max(marquee.startX, marquee.curX);
+    const y2 = Math.max(marquee.startY, marquee.curY);
+    marquee.boxEl.remove();
+    if (marquee.moved) {
+      selectedTables.clear();
+      tables.forEach(t => {
+        if (t.x < x2 && t.x + t.w > x1 && t.y < y2 && t.y + t.h > y1) {
+          selectedTables.add(t.id);
+        }
+      });
+      selectedTable = [...selectedTables][0] || null;
+      if (selectedTable) selectTable(selectedTable, true);
+      else syncSelectionUI();
+    }
+    marquee = null;
+  }
+
   if (!drag) return;
-  if (drag.curX !== undefined && drag.moved) {
-    drag.obj.x = drag.curX;
-    drag.obj.y = drag.curY;
+  clearAlignGuides();
+  if (drag.moved) {
+    if (drag.group && drag.group.length > 1) {
+      drag.group.forEach(item => {
+        if (item.curX !== undefined) {
+          item.obj.x = item.curX;
+          item.obj.y = item.curY;
+        }
+      });
+    } else if (drag.curX !== undefined) {
+      drag.obj.x = drag.curX;
+      drag.obj.y = drag.curY;
+    }
     refreshOverlapMarkers();
     saveLocal();
   }
@@ -1755,15 +2195,19 @@ window.addEventListener('pointercancel', finishDrag);
 // 選取切換
 function selectTable(id, skipRender = false) {
   selectedTable = id;
+  selectedTables.clear();
+  if (id) selectedTables.add(id);
   selectedSeat = null;
   selectedStruct = null;
   const t = tables.find(x => x.id === id);
   if (t) {
-    if (t.type !== 'auditoriumRow') $('tableType').value = t.type; // 弧形排不在下拉選項中
+    if (t.type !== 'auditoriumRow') $('tableType').value = t.type;
     $('tableName').value = t.name;
     $('seatCount').value = t.seats.filter(s => s.role !== 'side').length;
     $('sideCount').value = t.seats.filter(s => s.role === 'side').length;
     $('chairPos').value = t.chair || 'none';
+    $('tableRotation').value = t.rotation || 0;
+    switchTab('tab-table');
   }
   if (skipRender) syncSelectionUI();
   else render();
@@ -1771,6 +2215,8 @@ function selectTable(id, skipRender = false) {
 
 function selectSeat(tid, sid) {
   selectedTable = tid;
+  selectedTables.clear();
+  selectedTables.add(tid);
   selectedSeat = sid;
   selectedStruct = null;
   const t = tables.find(x => x.id === tid);
@@ -1780,7 +2226,7 @@ function selectSeat(tid, sid) {
     $('seatRole').value = s.role;
     $('seatNo').value = s.no;
   }
-  switchTab('tab-table');
+  switchTab('tab-seat');
   syncSelectionUI();
   $('seatName').focus();
   $('seatName').select();
@@ -1789,25 +2235,27 @@ function selectSeat(tid, sid) {
 function selectStruct(id, skipRender = false) {
   selectedStruct = id;
   selectedTable = selectedSeat = null;
+  selectedTables.clear();
   const st = structures.find(x => x.id === id);
   if (st) {
     $('structType').value = st.type;
     $('structLabel').value = st.label || '';
     $('structW').value = st.w;
     $('structH').value = st.h;
-    switchTab('tab-struct');
+    switchTab('tab-room');
   }
   if (skipRender) syncSelectionUI();
   else render();
 }
 
-// 桌位新增 / 更新 / 刪除
+// 桌位新增 / 更新 / 刪除 / 旋轉
 function addTable(recordHistory = true) {
   if (recordHistory) pushHistory();
   const type = $('tableType').value;
   const n = Math.max(1, +$('seatCount').value || 1);
   const side = Math.max(0, +$('sideCount').value || 0);
   const chair = $('chairPos').value;
+  const rotation = ((+$('tableRotation').value || 0) % 360 + 360) % 360;
   const size = computeTableSize(type, n, side);
 
   const newT = {
@@ -1818,6 +2266,7 @@ function addTable(recordHistory = true) {
     y: 120 + Math.floor(tables.length / 3) * 280,
     w: size.w,
     h: size.h,
+    rotation,
     chair,
     seats: makeSeats(n, side, chair, type)
   };
@@ -1830,20 +2279,21 @@ function updateTable() {
   const t = tables.find(x => x.id === selectedTable);
   if (!t) return alert('請先點選畫布上的桌位！');
   pushHistory();
-  const isArc = t.type === 'auditoriumRow'; // 弧形排保留型別與弧寬，避免被改成長方桌
+  const isArc = t.type === 'auditoriumRow';
   const type = isArc ? t.type : $('tableType').value;
   const n = Math.max(1, +$('seatCount').value || 1);
   const side = Math.max(0, +$('sideCount').value || 0);
   const chair = $('chairPos').value;
+  const rotation = ((+$('tableRotation').value || 0) % 360 + 360) % 360;
   const size = isArc ? { w: t.w, h: t.h } : computeTableSize(type, n, side);
 
   t.name = $('tableName').value.trim() || t.name;
   t.type = type;
   t.w = size.w;
   t.h = size.h;
+  t.rotation = rotation;
   t.chair = chair;
 
-  // 分離一般席與加位席保留姓名與 VIP 身分，同時避免殘留舊主席位
   const oldNormal = (t.seats || []).filter(s => s.role !== 'side');
   const oldSide = (t.seats || []).filter(s => s.role === 'side');
   const neu = makeSeats(n, side, chair, type);
@@ -1869,11 +2319,27 @@ function updateTable() {
   render();
 }
 
-function deleteTable() {
-  if (!selectedTable) return;
+function rotateSelectedTables(deg = 90) {
+  const ids = selectedTables.size ? [...selectedTables] : (selectedTable ? [selectedTable] : []);
+  if (!ids.length) return alert('請先點選欲旋轉的桌位！');
   pushHistory();
-  tables = tables.filter(x => x.id !== selectedTable);
+  ids.forEach(id => {
+    const t = tables.find(x => x.id === id);
+    if (t) t.rotation = (((t.rotation || 0) + deg) % 360 + 360) % 360;
+  });
+  const primary = tables.find(x => x.id === (selectedTable || ids[0]));
+  if (primary) $('tableRotation').value = primary.rotation || 0;
+  render();
+}
+
+function deleteTable() {
+  const ids = new Set(selectedTables);
+  if (selectedTable) ids.add(selectedTable);
+  if (!ids.size) return;
+  pushHistory();
+  tables = tables.filter(x => !ids.has(x.id));
   selectedTable = selectedSeat = null;
+  selectedTables.clear();
   render();
 }
 
@@ -2064,7 +2530,7 @@ window.addEventListener('keydown', e => {
       redo();
     }
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (selectedTable) {
+    if (selectedTable || selectedTables.size) {
       e.preventDefault();
       deleteTable();
     } else if (selectedStruct && selectedStruct !== 'stage') {
@@ -2122,6 +2588,7 @@ $('generateClassroom').onclick = () => {
         y,
         w: tableW,
         h: tableH,
+        rotation: 0,
         chair: 'none',
         seats: tableSeats
       });
@@ -2171,6 +2638,7 @@ $('generateAuditorium').onclick = () => {
       y: Math.round(centerY + 30),
       w: arcWidth,
       h: 24,
+      rotation: 0,
       radius: curRadius,
       angleSpan,
       chair: 'none',
@@ -2195,6 +2663,7 @@ $('generateAuditorium').onclick = () => {
 
 // 批次名單排位 Modal
 $('openBatchModal').onclick = () => $('batchModal').classList.add('show');
+if ($('openBatchModalSidebar')) $('openBatchModalSidebar').onclick = () => $('batchModal').classList.add('show');
 $('closeBatchModal').onclick = () => $('batchModal').classList.remove('show');
 
 $('batchToSelectedTable').onclick = () => {
@@ -2255,15 +2724,18 @@ function autoArrange() {
   render();
 }
 
-function updateStatus(overlapCount = detectSeatOverlaps(tables).size) {
+function updateStatus(
+  overlapCount = detectSeatOverlaps(tables).size,
+  dupNameCount = findDuplicateNames(tables).names.length
+) {
   const totalSeats = tables.reduce((a, t) => a + t.seats.length, 0);
   const namedSeats = tables.reduce((a, t) => a + t.seats.filter(s => s.name).length, 0);
   const baseText = `桌區: ${tables.length}｜總席位: ${totalSeats}｜已排定: ${namedSeats} 人｜結構物: ${structures.length}`;
-  if (overlapCount > 0) {
-    $('status').innerHTML = `${esc(baseText)}｜<span class="overlap-warn">⚠️ 重疊席位: ${overlapCount}</span>`;
-  } else {
-    $('status').textContent = baseText + '｜✅ 零重疊';
-  }
+  const notes = [];
+  if (overlapCount > 0) notes.push(`<span class="overlap-warn">⚠️ 重疊席位: ${overlapCount}</span>`);
+  else notes.push('✅ 零重疊');
+  if (dupNameCount > 0) notes.push(`<span class="dup-warn">⚠️ 重複名單: ${dupNameCount} 組</span>`);
+  $('status').innerHTML = `${esc(baseText)}｜${notes.join('｜')}`;
 }
 
 function getProjectData() {
@@ -2288,6 +2760,7 @@ function loadProjectData(raw) {
   structures = d.structures;
   tables = d.tables;
   selectedTable = selectedSeat = selectedStruct = null;
+  selectedTables.clear();
   render();
 }
 
@@ -2333,6 +2806,18 @@ $('exportSvg').onclick = () => {
   download(new Blob([svgContent], { type: 'image/svg+xml' }), safeFileName($('meetingName').value) + '_向量圖.svg');
 };
 
+$('exportPng').onclick = async () => {
+  try {
+    const d = getProjectData();
+    const svg = buildProjectSvg(d);
+    const blob = await svgToPngBlob(svg, d.roomW, d.roomH + 48, 2);
+    download(blob, safeFileName(d.meetingName) + '_座位圖.png');
+    showToast('已匯出高解析 PNG 圖片。');
+  } catch (err) {
+    alert('匯出 PNG 失敗：' + (err?.message || err));
+  }
+};
+
 let saveTimer = null;
 function saveLocal() {
   clearTimeout(saveTimer);
@@ -2341,7 +2826,7 @@ function saveLocal() {
   }, 180);
 }
 
-// 縮放控制
+// 縮放與輔助開關控制
 function applyZoom(val) {
   zoom = clamp(Math.round(val * 10) / 10, 0.4, 1.8);
   room.style.transform = `scale(${zoom})`;
@@ -2351,6 +2836,20 @@ $('zoomIn').onclick = () => applyZoom(zoom + 0.1);
 $('zoomOut').onclick = () => applyZoom(zoom - 0.1);
 $('zoomReset').onclick = () => applyZoom(1);
 
+$('snapToggle').onclick = () => {
+  snapToGrid = !snapToGrid;
+  $('snapToggle').textContent = snapToGrid ? '🧲 網格吸附: 開' : '🧲 網格吸附: 關';
+  $('snapToggle').classList.toggle('active-toggle', snapToGrid);
+};
+
+$('lockLayoutBtn').onclick = () => {
+  layoutLocked = !layoutLocked;
+  $('lockLayoutBtn').textContent = layoutLocked ? '🔒 已鎖定' : '🔓 鎖定配置';
+  $('lockLayoutBtn').classList.toggle('active-toggle', layoutLocked);
+};
+
+$('seatSearch').addEventListener('input', () => applySearchHighlight(true));
+
 // 清空與重設
 $('clearAll').onclick = () => $('confirmModal').classList.add('show');
 $('cancelClear').onclick = () => $('confirmModal').classList.remove('show');
@@ -2359,6 +2858,7 @@ $('confirmClear').onclick = () => {
   tables = [];
   structures = [];
   selectedTable = selectedSeat = selectedStruct = null;
+  selectedTables.clear();
   $('confirmModal').classList.remove('show');
   render();
 };
@@ -2376,6 +2876,7 @@ $('addTable').onclick = () => addTable(true);
 $('updateTable').onclick = updateTable;
 $('deleteTable').onclick = deleteTable;
 $('duplicateTable').onclick = duplicateTable;
+$('rotateTable90').onclick = () => rotateSelectedTables(90);
 $('applySeat').onclick = applySeat;
 $('clearSeat').onclick = () => { $('seatName').value = ''; applySeat(); };
 $('autoArrange').onclick = autoArrange;
